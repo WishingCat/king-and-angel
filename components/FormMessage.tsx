@@ -19,7 +19,8 @@ export function FormMessage({
 
   return (
     <div className={errorText ? "alert alert-error" : "alert alert-success"}>
-      {errorText ?? successText}
+      <strong style={{ marginRight: 6 }}>{errorText ? "提醒：" : "已记下："}</strong>
+      <span>{errorText ?? successText}</span>
     </div>
   );
 }

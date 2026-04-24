@@ -1,10 +1,41 @@
 import "./globals.css";
 import type { Metadata } from "next";
+import { Cormorant_Garamond, Fraunces, JetBrains_Mono, Noto_Serif_SC } from "next/font/google";
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const cormorant = Cormorant_Garamond({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  style: ["italic", "normal"],
+  variable: "--font-accent",
+  display: "swap",
+});
+
+const notoSerifSC = Noto_Serif_SC({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-han",
+  display: "swap",
+});
+
+const jetBrains = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "北大爱心社｜爱心万里行 2026 福建永春路",
+  title: "信笺 · 国王与天使 · 福建永春路 2026",
   description:
-    "国王与天使小平台：支持邀请注册、匿名守护、随机任务、盲视角后台和活动结束后查看结果。",
+    "北大爱心社 爱心万里行 2026 福建永春路。以一封封信笺为形，把心愿、配对、突然之间的温柔封存起来。",
 };
 
 export default function RootLayout({
@@ -13,8 +44,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="zh-CN">
-      <body>{children}</body>
+    <html
+      lang="zh-CN"
+      className={`${fraunces.variable} ${cormorant.variable} ${notoSerifSC.variable} ${jetBrains.variable}`}
+    >
+      <body>
+        <div className="page-grain" aria-hidden="true" />
+        {children}
+      </body>
     </html>
   );
 }

@@ -19,29 +19,42 @@ export default async function SealPage() {
       <div className="container">
         <div className="topbar">
           <div className="pill">
-            管理员：<strong>{profile.display_name}</strong>
+            <span>封缄仪式 · 管理员</span>
+            <strong>{profile.display_name}</strong>
           </div>
           <Link className="button-secondary" href="/dashboard">
-            返回控制台
+            回到桌前
           </Link>
         </div>
 
-        <section className="card">
-          <div className="section-heading">
-            <div className="eyebrow">一次性操作</div>
-            <h1 className="section-title">国王天使配对 · 封印流程</h1>
-            <p className="section-subtitle">
-              配对和加密完全在你的浏览器内完成。服务器只接收加密后的密文和 15 份密钥的公开表格。
-              执行后 seal_state 会被锁定为 published，任何管理员都不能再次进入此页面执行。
-            </p>
-          </div>
+        <section className="stack rise" style={{ gap: 20, marginBottom: 36 }}>
+          <p className="meta-cap">once, and only once</p>
+          <h1 className="display-title" style={{ fontSize: "clamp(32px, 4.6vw, 52px)" }}>
+            为这一季，<em>按下朱印</em>
+          </h1>
+          <p className="lede">
+            所有配对与加密都在你的这台浏览器内完成。服务器只会收到密文，以及 15 份分发名单。
+            封缄一旦完成，<strong>任何管理员</strong>都不能再次进入这个页面重做。
+          </p>
+        </section>
 
+        <div className="rule">
+          <span className="rule-dot" />
+          <span className="meta-cap">seal chamber</span>
+          <span className="rule-dot" />
+        </div>
+
+        <section className="sheet sheet-xl rise" style={{ marginTop: 24 }}>
           <SealRunner
             profiles={profiles}
             wishes={wishes}
             alreadySealed={sealStatus === "published"}
           />
         </section>
+
+        <footer className="text-center" style={{ marginTop: 48, color: "var(--ink-muted)", fontSize: 13, lineHeight: 2 }}>
+          <div className="meta-cap">seal ceremony · for the custodian only</div>
+        </footer>
       </div>
     </main>
   );

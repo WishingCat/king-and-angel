@@ -15,69 +15,134 @@ export default async function AuthPage({ searchParams }: PageProps) {
       <div className="container">
         <div className="topbar">
           <Link className="pill" href="/">
-            ← 返回首页
+            ← 返回封面
           </Link>
+          <span className="meta-cap">2026 · 福建 永春路</span>
         </div>
 
-        <section className="hero">
-          <div className="card">
-            <h1 className="title">登录 / 注册</h1>
-            <p className="subtitle">
-              第一次使用时，请使用组织者发放的邀请码完成注册，并设置自己的登录密码。
-              注册成功后，你可以进入活动控制台填写心愿、查看自己的国王，并在活动过程中完成留言和任务记录。
-            </p>
-            <FormMessage searchParams={params} />
-          </div>
-
-          <div className="card soft-card">
-            <h2 className="section-title">邀请码说明</h2>
-            <p className="section-subtitle">
-              每位参与者对应一个邀请码。邀请码仅可使用一次，注册成功后会与你的账号绑定。
-            </p>
-            <div className="footer-note">
-              如果你在注册时遇到“邀请码不存在”“邀请码已使用”或其他问题，请联系文建负责人进行核对。
-              注册完成后，请牢记你填写的邮箱和密码；后续登录时，请直接使用该邮箱和密码进入系统。
-            </div>
-          </div>
+        <section className="stack rise" style={{ gap: 22, marginBottom: 36 }}>
+          <p className="meta-cap">register · sign in</p>
+          <h1 className="display-title" style={{ fontSize: "clamp(34px, 5vw, 54px)" }}>
+            登记，<em>或者归位</em>
+          </h1>
+          <p className="lede">
+            首次前来，请用组织者当面交付的邀请码完成登记；之后凭注册时的邮箱和密码归位即可。
+            邀请码只能用一次——登记完成便与账户绑定。
+          </p>
+          <FormMessage searchParams={params} />
         </section>
 
-        <section className="grid grid-2">
-          <div className="card">
-            <h2 className="section-title">首次注册</h2>
-            <p className="section-subtitle">需要邀请码、邮箱和密码。</p>
-            <form action={signUpAction} className="stack">
+        <div className="rule">
+          <span className="rule-dot" />
+          <span className="meta-cap">two doors</span>
+          <span className="rule-dot" />
+        </div>
+
+        <section className="grid grid-2 rise" style={{ marginTop: 24 }}>
+          <div className="sheet sheet-xl">
+            <span className="chapter-no">
+              <span className="chapter-label">其一</span>
+              <span>first time here</span>
+            </span>
+            <h2 className="section-title">凭邀请码登记</h2>
+            <p className="section-subtitle mb-3">
+              三件物事：一枚邀请码、一个邮箱、一组至少六位的密码。
+            </p>
+
+            <form action={signUpAction} className="stack" style={{ gap: 14 }}>
               <div>
                 <label className="label">邀请码</label>
-                <input className="input" name="inviteCode" placeholder="例如 A1001" />
+                <input
+                  className="input input-mono"
+                  name="inviteCode"
+                  placeholder="例如 A1001"
+                  autoCapitalize="characters"
+                />
               </div>
               <div>
                 <label className="label">邮箱</label>
-                <input className="input" type="email" name="email" placeholder="name@example.com" />
+                <input
+                  className="input"
+                  type="email"
+                  name="email"
+                  placeholder="name@example.com"
+                  autoComplete="email"
+                />
               </div>
               <div>
                 <label className="label">密码</label>
-                <input className="input" type="password" name="password" placeholder="至少 6 位" />
+                <input
+                  className="input"
+                  type="password"
+                  name="password"
+                  placeholder="至少 6 位"
+                  autoComplete="new-password"
+                />
               </div>
-              <SubmitButton text="完成注册" pendingText="正在注册..." />
+              <div className="row gap-md mt-1">
+                <SubmitButton text="完成登记" pendingText="正在登记……" />
+                <span className="meta-cap">邀请码仅可使用一次</span>
+              </div>
             </form>
           </div>
 
-          <div className="card">
-            <h2 className="section-title">已有账号，直接登录</h2>
-            <p className="section-subtitle">使用注册时填写的邮箱和密码。</p>
-            <form action={signInAction} className="stack">
+          <div className="sheet sheet-xl">
+            <span className="chapter-no">
+              <span className="chapter-label">其二</span>
+              <span>welcome back</span>
+            </span>
+            <h2 className="section-title">已有账户 · 归位</h2>
+            <p className="section-subtitle mb-3">
+              使用登记时填写的邮箱与密码即可。
+            </p>
+
+            <form action={signInAction} className="stack" style={{ gap: 14 }}>
               <div>
                 <label className="label">邮箱</label>
-                <input className="input" type="email" name="email" placeholder="name@example.com" />
+                <input
+                  className="input"
+                  type="email"
+                  name="email"
+                  placeholder="name@example.com"
+                  autoComplete="email"
+                />
               </div>
               <div>
                 <label className="label">密码</label>
-                <input className="input" type="password" name="password" placeholder="输入你的密码" />
+                <input
+                  className="input"
+                  type="password"
+                  name="password"
+                  placeholder="输入你的密码"
+                  autoComplete="current-password"
+                />
               </div>
-              <SubmitButton text="登录" pendingText="正在登录..." />
+              <div className="row gap-md mt-1">
+                <SubmitButton text="归位 · 进入桌前" pendingText="正在登录……" />
+              </div>
             </form>
           </div>
         </section>
+
+        <section className="sheet sheet-xl rise mt-4" style={{ marginTop: 32 }}>
+          <span className="chapter-no">
+            <span className="chapter-label">附记</span>
+            <span>about your invite code</span>
+          </span>
+          <h2 className="section-title">关于邀请码</h2>
+          <p className="lede mt-2">
+            每位参与者对应一枚邀请码——它决定了你在登记表上的姓名与是否拥有管理员权限。
+            如遇「邀请码不存在」「邀请码已被使用」等情况，请联系组织者核对。
+            登记完成后请妥善保管邮箱与密码。
+          </p>
+        </section>
+
+        <footer className="text-center" style={{ marginTop: 64, color: "var(--ink-muted)", fontSize: 13, lineHeight: 2 }}>
+          <div className="meta-cap">北京大学爱心社 · 2026</div>
+          <div style={{ marginTop: 4, fontFamily: "var(--f-accent)", fontStyle: "italic" }}>
+            with warmth and silence
+          </div>
+        </footer>
       </div>
     </main>
   );

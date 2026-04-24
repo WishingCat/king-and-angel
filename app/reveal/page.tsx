@@ -17,24 +17,39 @@ export default async function RevealPage() {
     <main className="page-shell">
       <div className="container">
         <div className="topbar">
-          <div className="pill">揭示仪式</div>
+          <div className="pill">
+            <span>揭示仪式</span>
+            <strong>the gathering</strong>
+          </div>
           <Link className="button-secondary" href="/dashboard">
-            返回控制台
+            回到桌前
           </Link>
         </div>
 
-        <section className="card">
-          <div className="section-heading">
-            <div className="eyebrow">活动结束</div>
-            <h1 className="section-title">国王天使揭示仪式</h1>
-            <p className="section-subtitle">
-              收齐至少 10 份密钥，本页将在浏览器内本地重组主密钥并解密完整配对。任何参与者、网站运营者
-              和数据库管理员都没法少于 10 份完成揭示。
-            </p>
-          </div>
+        <section className="stack rise" style={{ gap: 20, marginBottom: 36 }}>
+          <p className="meta-cap">the last chapter</p>
+          <h1 className="display-title" style={{ fontSize: "clamp(32px, 4.6vw, 52px)" }}>
+            把钥匙<em>聚在一起</em>
+          </h1>
+          <p className="lede">
+            一整季的心愿都被封在一张加密的名册里，只有把至少 10 把钥匙同时并在一处，
+            才能把它拆开。请当面聚在同一台电脑前，依次粘贴各自的那一把。
+          </p>
+        </section>
 
+        <div className="rule">
+          <span className="rule-dot" />
+          <span className="meta-cap">keys &amp; cipher</span>
+          <span className="rule-dot" />
+        </div>
+
+        <section className="sheet sheet-xl rise" style={{ marginTop: 24 }}>
           <RevealClient sealed={(data as SealedPairing | null) ?? null} />
         </section>
+
+        <footer className="text-center" style={{ marginTop: 48, color: "var(--ink-muted)", fontSize: 13, lineHeight: 2 }}>
+          <div className="meta-cap">sub rosa · with gratitude</div>
+        </footer>
       </div>
     </main>
   );

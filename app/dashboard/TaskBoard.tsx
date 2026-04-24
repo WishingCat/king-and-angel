@@ -16,6 +16,20 @@ type Props = {
   currentUserId: string;
 };
 
+const TAB_LABEL: Record<Tab, string> = {
+  available: "可接取",
+  mine: "我接的",
+  completed: "已完成",
+};
+
+function formatStamp(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getMonth() + 1}.${d.getDate()} · ${d.getHours().toString().padStart(2, "0")}:${d
+    .getMinutes()
+    .toString()
+    .padStart(2, "0")}`;
+}
+
 export function TaskBoard({ tasks, currentUserId }: Props) {
   const [tab, setTab] = useState<Tab>("available");
   const [title, setTitle] = useState("");
@@ -43,108 +57,99 @@ export function TaskBoard({ tasks, currentUserId }: Props) {
     tab === "available" ? buckets.available : tab === "mine" ? buckets.mine : buckets.completed;
 
   return (
-    <div className="stack">
-      <form action={uploadTaskAction} className="stack">
-        <div>
-          <label className="label">匿名上传任务</label>
-          <input
-            className="input"
-            name="title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="任务标题（例如：帮我带一杯温水）"
-            maxLength={80}
-          />
-          <div className="footer-note" style={{ textAlign: "right" }}>
-            {title.length}/80
-          </div>
+    <div className="stack" style={{ gap: 26 }}>
+      <form action={uploadTaskAction} className="stack" style={{ gap: 12 }}>
+        <label className="label">匿名贴一张任务条</label>
+        <input
+          className="input"
+          name="title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="任务条题目（如：替我去未名湖看一眼今天的鸭子）"
+          maxLength={80}
+        />
+        <span className="char-count" style={{ marginTop: -4 }}>{title.length} / 80</span>
+        <textarea
+          className="textarea"
+          name="description"
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="说一下做这件事的细节、时间和算完成的标准。"
+          maxLength={500}
+          rows={3}
+        />
+        <div className="row-between">
+          <span className="char-count" style={{ marginTop: 0 }}>{description.length} / 500</span>
+          <SubmitButton text="贴上任务板" pendingText="贴上中……" />
         </div>
-        <div>
-          <textarea
-            className="textarea"
-            name="description"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="任务说明（要做什么、什么时候、什么标准算完成）"
-            maxLength={500}
-            rows={3}
-          />
-          <div className="footer-note" style={{ textAlign: "right" }}>
-            {description.length}/500
-          </div>
-        </div>
-        <SubmitButton text="匿名上传任务" pendingText="上传中..." />
-        <div className="footer-note">
-          任务是匿名上传的，平台不记录上传者身份。接取任务的人会实名显示。
-        </div>
+        <p className="meta-cap">任务匿名上传 · 接取者实名 · 完成由接取者本人勾选</p>
       </form>
 
-      <div className="separator" />
+      <div className="rule-dashed" />
 
-      <div className="button-row" style={{ gap: 8 }}>
-        <button
-          type="button"
-          className={tab === "available" ? "button" : "button-secondary"}
-          onClick={() => setTab("available")}
-        >
-          可接取（{buckets.available.length}）
-        </button>
-        <button
-          type="button"
-          className={tab === "mine" ? "button" : "button-secondary"}
-          onClick={() => setTab("mine")}
-        >
-          我接取的（{buckets.mine.length}）
-        </button>
-        <button
-          type="button"
-          className={tab === "completed" ? "button" : "button-secondary"}
-          onClick={() => setTab("completed")}
-        >
-          已完成（{buckets.completed.length}）
-        </button>
+      <div className="stamp-tabs" role="tablist">
+        {(Object.keys(TAB_LABEL) as Tab[]).map((key) => {
+          const count =
+            key === "available"
+              ? buckets.available.length
+              : key === "mine"
+                ? buckets.mine.length
+                : buckets.completed.length;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-pressed={tab === key}
+              className="stamp-tab"
+              onClick={() => setTab(key)}
+            >
+              {TAB_LABEL[key]} · {count}
+            </button>
+          );
+        })}
       </div>
 
       <div className="list">
         {list.length === 0 ? (
-          <div className="list-item">
+          <div className="empty-note">
             {tab === "available"
-              ? "当前没有可接取的任务。"
+              ? "— 任务板上没有空闲任务。 —"
               : tab === "mine"
-                ? "你还没有接取中的任务。"
-                : "还没有已完成的任务。"}
+                ? "— 你目前没有进行中的任务。 —"
+                : "— 还没有已完成的任务。 —"}
           </div>
         ) : (
           list.map((task) => (
-            <div className="list-item" key={task.id}>
-              <div className="task-title-emphasis">{task.title}</div>
-              <div className="footer-note" style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>
-                {task.description}
-              </div>
-              <div className="small" style={{ marginTop: 8 }}>
-                发布时间：{new Date(task.created_at).toLocaleString("zh-CN")}
+            <article className="entry" key={task.id}>
+              <div className="entry-meta">
+                <span className="entry-timestamp">{formatStamp(task.created_at)}</span>
                 {task.claimer_display_name ? (
-                  <> · 接取人：{task.claimer_display_name}</>
-                ) : null}
+                  <span className="entry-claim">已被 {task.claimer_display_name} 接取</span>
+                ) : (
+                  <span className="meta-cap">未接取</span>
+                )}
                 {task.completed_at ? (
-                  <> · 完成于 {new Date(task.completed_at).toLocaleString("zh-CN")}</>
+                  <span className="entry-status">完成于 {formatStamp(task.completed_at)}</span>
                 ) : null}
               </div>
+              <h3 className="entry-title">{task.title}</h3>
+              <p className="entry-body">{task.description}</p>
 
               {tab === "available" ? (
-                <form action={claimTaskAction} style={{ marginTop: 10 }}>
+                <form action={claimTaskAction} style={{ marginTop: 14 }}>
                   <input type="hidden" name="task_id" value={task.id} />
-                  <SubmitButton text="接取任务" pendingText="接取中..." />
+                  <SubmitButton text="我来接" pendingText="接取中……" />
                 </form>
               ) : null}
 
               {tab === "mine" ? (
-                <form action={completeTaskAction} style={{ marginTop: 10 }}>
+                <form action={completeTaskAction} style={{ marginTop: 14 }}>
                   <input type="hidden" name="task_id" value={task.id} />
-                  <SubmitButton text="标记为已完成" pendingText="处理中..." />
+                  <SubmitButton text="我已经做完了" pendingText="标记中……" />
                 </form>
               ) : null}
-            </div>
+            </article>
           ))
         )}
       </div>

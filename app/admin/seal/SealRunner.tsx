@@ -87,8 +87,19 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
 
   if (alreadySealed) {
     return (
-      <div className="alert alert-success">
-        当前活动已经完成封印，任何管理员都无法再次执行。如确实需要重做，请联系数据库管理员手工处理。
+      <div className="stack" style={{ gap: 18 }}>
+        <div className="row gap-md" style={{ alignItems: "center" }}>
+          <div className="seal-stamp" aria-hidden="true">
+            缄
+          </div>
+          <div>
+            <p className="meta-cap">already sealed</p>
+            <h2 className="section-title">这一季已封缄完毕</h2>
+          </div>
+        </div>
+        <p className="lede">
+          任何管理员都无法在页面上再次执行封缄。如确实需要重做，请联系数据库管理员手工处理。
+        </p>
       </div>
     );
   }
@@ -96,7 +107,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
   if (profiles.length !== 15) {
     return (
       <div className="alert alert-error">
-        当前已注册 {profiles.length} 人，需要 15 人齐全才能封印。
+        <strong>人数未齐。</strong>当前已登记 {profiles.length} 人，需要 15 位全部到齐才能封缄。
       </div>
     );
   }
@@ -104,7 +115,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
   if (!everyoneHasThree) {
     return (
       <div className="alert alert-error">
-        还有参与者未填满 3 条心愿，请等待全员完成后再来封印。
+        <strong>心愿未备。</strong>还有人未填满三条心愿——请等待全员完成后再来。
       </div>
     );
   }
@@ -230,75 +241,121 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
   }
 
   return (
-    <div className="stack">
+    <div className="stack" style={{ gap: 22 }}>
       {state.kind === "idle" ? (
         <>
-          <div className="alert alert-error">
-            <strong>这是一次性操作。</strong>
-            执行后任何管理员都不能再分配。在你点击封印之前，请确认 15 位参与者都已完成 3 条心愿。
+          <div className="row gap-md" style={{ alignItems: "center" }}>
+            <div className="seal-stamp" aria-hidden="true">
+              印
+            </div>
+            <div>
+              <p className="meta-cap">ready to seal</p>
+              <h2 className="section-title">15 位齐聚 · 45 条心愿齐备</h2>
+            </div>
           </div>
-          <button type="button" className="button-danger" onClick={runSeal}>
-            执行封印（不可撤销）
-          </button>
+
+          <p className="lede">
+            按下朱印之后，浏览器将在本地：生成配对、拆分主密钥为 15 把、把每份心愿封入对应天使的信。
+            所有明文会随即销毁——连你这位管理员也再无法看到。
+          </p>
+
+          <div className="alert alert-error">
+            <strong>一次性仪式。</strong>执行之后任何管理员都无法再回到此页。请在所有参与者都在场时进行。
+          </div>
+
+          <div className="row gap-md">
+            <button type="button" className="button-danger" onClick={runSeal}>
+              按下朱印 · 封缄这一季
+            </button>
+            <span className="meta-cap">不可撤销</span>
+          </div>
         </>
       ) : null}
 
       {state.kind === "running" ? (
-        <div className="alert alert-success">封印进行中：{state.step}</div>
+        <div className="alert alert-success">
+          <strong>仪式进行中：</strong>
+          {state.step}
+        </div>
       ) : null}
 
       {state.kind === "error" ? (
         <>
-          <div className="alert alert-error">{state.message}</div>
-          <button type="button" className="button-secondary" onClick={() => setState({ kind: "idle" })}>
-            返回重试
+          <div className="alert alert-error">
+            <strong>未能完成：</strong>
+            {state.message}
+          </div>
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => setState({ kind: "idle" })}
+          >
+            回到入口
           </button>
         </>
       ) : null}
 
       {state.kind === "ready" ? (
         <>
-          <div className="alert alert-success">
-            封印成功。请将下面 15 把密钥**逐一线下分发**给对应参与者（建议纸条或一对一私聊）。
-            离开本页面后这些密钥**不会再显示**——服务器和数据库都没有保存它们。
+          <div className="row gap-md" style={{ alignItems: "center" }}>
+            <div className="seal-stamp" aria-hidden="true">
+              缄
+            </div>
+            <div>
+              <p className="meta-cap">sealed · 15 keys minted</p>
+              <h2 className="section-title">十五把钥匙 · 一对一分发</h2>
+            </div>
           </div>
 
-          <div className="list">
-            {state.shares.map((line) => (
-              <div className="list-item" key={line.participantId}>
-                <div style={{ fontWeight: 700 }}>{line.participantName}</div>
-                <div
-                  className="footer-note"
-                  style={{
-                    marginTop: 6,
-                    fontFamily: "monospace",
-                    wordBreak: "break-all",
-                    userSelect: "all",
-                  }}
-                >
-                  {line.share}
+          <p className="lede">
+            下面每一把钥匙，请<strong>当面</strong>交给对应的参与者（纸条 · 私聊 · 当面口述）。
+            离开本页之后钥匙不会再显示——服务器和数据库里都没有它们的痕迹。
+          </p>
+
+          <div className="registry sheet-plain" style={{ padding: 0 }}>
+            {state.shares.map((line, idx) => (
+              <div className="registry-row" style={{ padding: "16px 18px" }} key={line.participantId}>
+                <div>
+                  <div className="meta-cap">
+                    №{(idx + 1).toString().padStart(2, "0")} · for
+                  </div>
+                  <div className="registry-name">{line.participantName}</div>
                 </div>
+                <div className="share-chip">{line.share}</div>
               </div>
             ))}
           </div>
 
-          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <label
+            className="row gap-md"
+            style={{
+              padding: "12px 14px",
+              border: "1px dashed var(--rule)",
+              borderRadius: "var(--r-md)",
+              background: "var(--paper-soft)",
+            }}
+          >
             <input
               type="checkbox"
               checked={acknowledged}
               onChange={(event) => setAcknowledged(event.target.checked)}
+              style={{ width: 16, height: 16 }}
             />
-            我已经把每位参与者的密钥分发出去，准备清空本页。
+            <span style={{ fontSize: 14 }}>
+              十五把钥匙已当面逐一交付。可以清空本页了。
+            </span>
           </label>
 
-          <button
-            type="button"
-            className="button"
-            disabled={!acknowledged}
-            onClick={wipeAndExit}
-          >
-            分发完毕，清空并返回
-          </button>
+          <div>
+            <button
+              type="button"
+              className="button"
+              disabled={!acknowledged}
+              onClick={wipeAndExit}
+            >
+              分发完毕 · 清空并离开
+            </button>
+          </div>
         </>
       ) : null}
     </div>

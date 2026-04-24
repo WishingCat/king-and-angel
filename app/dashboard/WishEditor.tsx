@@ -10,6 +10,18 @@ type Props = {
   sealStatus: SealStatus;
 };
 
+const ORDINALS = ["其一", "其二", "其三"] as const;
+const HINTS = [
+  "你最想被默默提醒的一件小事",
+  "你一直想做、但犹豫着没起头的小习惯",
+  "你希望有人面对面跟你说的一句话",
+] as const;
+const PLACEHOLDERS = [
+  "希望有人在我忙到忘了吃饭的时候，提醒我去食堂看一下……",
+  "希望能够每周读完一本书，哪怕只是散文、诗集都好。",
+  "希望有人告诉我，我上学期做志愿者时让他感到温暖的一件事。",
+] as const;
+
 export function WishEditor({ initialWishes, sealStatus }: Props) {
   const locked = sealStatus === "published";
   const byIndex = new Map(initialWishes.map((wish) => [wish.wish_index, wish.content]));
@@ -20,10 +32,13 @@ export function WishEditor({ initialWishes, sealStatus }: Props) {
   ]);
 
   return (
-    <form action={saveWishesAction} className="stack">
+    <form action={saveWishesAction} className="stack" style={{ gap: 22 }}>
       {[0, 1, 2].map((index) => (
-        <div key={index}>
-          <label className="label">心愿 {index + 1}</label>
+        <div className="wish-field" key={index}>
+          <div className="wish-field-label">
+            <span className="wish-field-ordinal">{ORDINALS[index]}</span>
+            <span className="wish-field-hint">{HINTS[index]}</span>
+          </div>
           <textarea
             className="textarea"
             name={`wish_${index}`}
@@ -33,27 +48,24 @@ export function WishEditor({ initialWishes, sealStatus }: Props) {
               next[index] = event.target.value;
               setValues(next);
             }}
-            placeholder={
-              index === 0
-                ? "例如：希望有人能在忙碌的时候提醒我按时吃饭、早点休息。"
-                : "再写一条具体、温和、可执行的心愿。"
-            }
+            placeholder={PLACEHOLDERS[index]}
             disabled={locked}
             maxLength={200}
             rows={3}
           />
-          <div className="footer-note" style={{ textAlign: "right" }}>
-            {values[index].length}/200
-          </div>
+          <span className="char-count">{values[index].length} / 200</span>
         </div>
       ))}
 
       {locked ? (
         <div className="alert alert-success">
-          配对已封印，心愿不能再修改。
+          <strong>已封缄。</strong>这三条心愿今后只躺在天使的信里，你的名字他会知道。
         </div>
       ) : (
-        <SubmitButton text="保存 3 条心愿" pendingText="保存中..." />
+        <div className="row gap-md mt-1">
+          <SubmitButton text="封进信里" pendingText="保存中……" />
+          <span className="meta-cap">封缄前可随时修改</span>
+        </div>
       )}
     </form>
   );

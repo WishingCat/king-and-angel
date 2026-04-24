@@ -28,6 +28,8 @@ type UiState =
   | { kind: "decrypting" }
   | { kind: "unlocked"; payload: RevealedEnvelope };
 
+const ORDINALS = ["其一", "其二", "其三"] as const;
+
 export function KingReveal({ envelope, userId }: Props) {
   const [state, setState] = useState<UiState>({ kind: "loading" });
   const [shareInput, setShareInput] = useState("");
@@ -51,12 +53,11 @@ export function KingReveal({ envelope, userId }: Props) {
           setState({ kind: "unlocked", payload: parsed });
         }
       } catch {
-        // Stored key no longer decrypts (e.g. seal was reset server-side).
         await clearPersonalKey(userId);
         if (!cancelled) {
           setState({
             kind: "need_share",
-            error: "本地缓存的密钥已失效，请重新输入。",
+            error: "本地缓存的钥匙已失效，请再输入一次。",
           });
         }
       }
@@ -70,7 +71,7 @@ export function KingReveal({ envelope, userId }: Props) {
     event.preventDefault();
     const trimmed = shareInput.trim();
     if (!trimmed) {
-      setState({ kind: "need_share", error: "请先粘贴你的密钥。" });
+      setState({ kind: "need_share", error: "请先把钥匙粘贴进来。" });
       return;
     }
     setState({ kind: "decrypting" });
@@ -88,7 +89,7 @@ export function KingReveal({ envelope, userId }: Props) {
     } catch {
       setState({
         kind: "need_share",
-        error: "密钥不正确，解锁失败。请确认粘贴的是你自己的那一把。",
+        error: "这把钥匙打不开这封信——请确认粘贴的是你自己的那一把。",
       });
     }
   }
@@ -100,27 +101,23 @@ export function KingReveal({ envelope, userId }: Props) {
   }
 
   if (state.kind === "loading") {
-    return (
-      <div className="list-item">
-        <div className="small">正在检查本地密钥...</div>
-      </div>
-    );
+    return <div className="empty-note">正在寻找本机留存的钥匙……</div>;
   }
 
   if (state.kind === "need_share" || state.kind === "decrypting") {
     return (
-      <form onSubmit={attemptUnlock} className="stack">
-        <div>
-          <label className="label">请输入你收到的密钥</label>
+      <form onSubmit={attemptUnlock} className="stack" style={{ gap: 14 }}>
+        <div className="key-box">
+          <div className="key-ribbon">your personal key</div>
+          <label className="label">请将收到的钥匙粘贴在此</label>
           <textarea
-            className="textarea"
+            className="textarea input-mono"
             value={shareInput}
             onChange={(event) => setShareInput(event.target.value)}
-            placeholder="把管理员发给你的那串字符粘贴到这里"
+            placeholder="一长串字符，来自管理员当面分发的那一条"
             rows={3}
             autoComplete="off"
             spellCheck={false}
-            style={{ fontFamily: "monospace" }}
             disabled={state.kind === "decrypting"}
           />
         </div>
@@ -129,42 +126,67 @@ export function KingReveal({ envelope, userId }: Props) {
           <div className="alert alert-error">{state.error}</div>
         ) : null}
 
-        <button type="submit" className="button" disabled={state.kind === "decrypting"}>
-          {state.kind === "decrypting" ? "解密中..." : "解锁我的国王"}
-        </button>
-
-        <div className="footer-note">
-          密钥在本机浏览器内完成解密，不会上传服务器。解锁后会在本设备缓存，下次登录自动展示。
+        <div className="row gap-md">
+          <button type="submit" className="button" disabled={state.kind === "decrypting"}>
+            {state.kind === "decrypting" ? "正在拆开……" : "拆开我的信"}
+          </button>
+          <span className="meta-cap">解密在本机完成 · 不上传服务器</span>
         </div>
       </form>
     );
   }
 
-  // unlocked
   return (
-    <div className="stack">
-      <div className="list-item">
-        <div className="small">我的国王</div>
-        <div className="big-inline-value">{state.payload.king_display_name}</div>
+    <div className="stack" style={{ gap: 18 }}>
+      <div className="row gap-md" style={{ alignItems: "flex-start" }}>
+        <div className="seal-stamp seal-stamp-sm" aria-hidden="true">
+          启
+        </div>
+        <div style={{ flex: 1 }}>
+          <p className="meta-cap">your king</p>
+          <h3
+            className="section-title"
+            style={{ fontSize: 32, marginTop: 4, letterSpacing: "-0.01em" }}
+          >
+            {state.payload.king_display_name}
+          </h3>
+        </div>
       </div>
 
-      <div className="list-item">
-        <div className="small">国王的 3 条心愿</div>
-        <ol style={{ paddingLeft: 20, marginTop: 8 }}>
+      <div className="rule-dashed" />
+
+      <div>
+        <p className="meta-cap">三条心愿</p>
+        <ol className="stack" style={{ marginTop: 10, paddingLeft: 0, listStyle: "none", gap: 14 }}>
           {state.payload.king_wishes.map((wish, index) => (
-            <li key={index} style={{ marginBottom: 8 }}>
-              {wish}
+            <li key={index}>
+              <div className="wish-field-label" style={{ marginBottom: 4 }}>
+                <span className="wish-field-ordinal">{ORDINALS[index]}</span>
+              </div>
+              <p
+                className="entry-body"
+                style={{
+                  borderLeft: "2px solid var(--seal)",
+                  paddingLeft: 14,
+                  margin: 0,
+                }}
+              >
+                {wish}
+              </p>
             </li>
           ))}
         </ol>
       </div>
 
-      <button type="button" className="button-secondary" onClick={lockLocally}>
-        在此设备锁定 / 清除本地密钥
-      </button>
+      <div className="rule-dashed" />
 
-      <div className="footer-note">
-        如果你更换了设备，或想让这台设备不再自动展示国王信息，点击上方按钮即可清除本地缓存。
+      <div className="row-between">
+        <span className="meta-cap">
+          在这台设备上已缓存 · 可随时锁回
+        </span>
+        <button type="button" className="btn-link" onClick={lockLocally}>
+          在此设备上锁
+        </button>
       </div>
     </div>
   );
