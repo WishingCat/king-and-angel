@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PARTICIPANT_TOTAL, REVEAL_THRESHOLD } from "@/lib/config";
 
 const chapters = [
   {
@@ -9,7 +10,7 @@ const chapters = [
   {
     mark: "其二",
     title: "封缄之后，各自收钥",
-    body: "管理员在 15 人齐聚之日按下封印。每个人收到的钥匙独一无二——只开自己的那一格。",
+    body: `管理员在 ${PARTICIPANT_TOTAL} 人齐聚之日按下封印。每个人收到的钥匙独一无二——只开自己的那一格。`,
   },
   {
     mark: "其三",
@@ -23,8 +24,8 @@ const chapters = [
   },
   {
     mark: "其五",
-    title: "活动终章，十人共启",
-    body: "尾声之时，需要十个人同时将自己的钥匙并在一处，才能一次性看到这一季所有的配对。",
+    title: `活动终章，${REVEAL_THRESHOLD} 人共启`,
+    body: `尾声之时，需要 ${REVEAL_THRESHOLD} 个人同时将自己的钥匙并在一处，才能一次性看到这一季所有的配对。`,
   },
 ];
 
@@ -37,12 +38,12 @@ const principles = [
   {
     tag: "one key, one letter",
     title: "一人一钥，一钥一信",
-    body: "十五位参与者各自持有一把密钥——HKDF 衍生的个人子钥——只能开自己收到的那封信。",
+    body: `${PARTICIPANT_TOTAL} 位参与者各自持有一把密钥——HKDF 衍生的个人子钥——只能开自己收到的那封信。`,
   },
   {
     tag: "ten of fifteen",
     title: "十人合启，方见全貌",
-    body: "Shamir (n=15, k=10) 秘密共享：十把密钥合在一起才能还原主密钥，解开这一季完整的名册。",
+    body: `Shamir (n=${PARTICIPANT_TOTAL}, k=${REVEAL_THRESHOLD}) 秘密共享：${REVEAL_THRESHOLD} 把密钥合在一起才能还原主密钥，解开这一季完整的名册。`,
   },
 ];
 
@@ -165,7 +166,7 @@ export default function HomePage() {
             <h2 className="section-title">准备好了吗？</h2>
             <p className="lede">
               收到邀请码，便可前来登记。登记完成后，先去写下你的三条心愿——
-              慢一点、具体一点、温柔一点。等 15 位同行者都到齐，便是封缄之时。
+              慢一点、具体一点、温柔一点。等 {PARTICIPANT_TOTAL} 位同行者都到齐，便是封缄之时。
             </p>
 
             <div className="row gap-md mt-2">

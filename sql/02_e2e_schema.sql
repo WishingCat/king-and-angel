@@ -267,7 +267,8 @@ security definer
 set search_path = public
 as $$
 declare
-  expected_total constant int := 15;
+  -- 活动总人数。4 人测试版用 4；切回正式版改成 15，并同步修改 lib/config.ts
+  expected_total constant int := 4;
   participant_count int;
   wish_groups int;
   envelope_count int;

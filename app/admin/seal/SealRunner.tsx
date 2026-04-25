@@ -8,9 +8,10 @@ import {
   importRawAesKey,
   sha256Hex,
 } from "@/lib/crypto/aead";
-import { bytesToBase64, utf8Encode } from "@/lib/crypto/encoding";
+import { utf8Encode } from "@/lib/crypto/encoding";
 import { deriveAesKeyFromShare } from "@/lib/crypto/hkdf";
 import { splitSecret } from "@/lib/crypto/sss";
+import { PARTICIPANT_TOTAL, REVEAL_THRESHOLD, WISHES_PER_PERSON } from "@/lib/config";
 import {
   publishSealAction,
   type SealEnvelopePayload,
@@ -104,10 +105,10 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
     );
   }
 
-  if (profiles.length !== 15) {
+  if (profiles.length !== PARTICIPANT_TOTAL) {
     return (
       <div className="alert alert-error">
-        <strong>人数未齐。</strong>当前已登记 {profiles.length} 人，需要 15 位全部到齐才能封缄。
+        <strong>人数未齐。</strong>当前已登记 {profiles.length} 人，需要 {PARTICIPANT_TOTAL} 位全部到齐才能封缄。
       </div>
     );
   }
@@ -134,8 +135,8 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
       const activityKeyBytes = await exportRawAesKey(activityKey);
 
       // 2. Shamir split
-      setState({ kind: "running", step: "拆分 15 份密钥..." });
-      const shareStrings = await splitSecret(activityKeyBytes, 15, 10);
+      setState({ kind: "running", step: `拆分 ${PARTICIPANT_TOTAL} 份密钥...` });
+      const shareStrings = await splitSecret(activityKeyBytes, PARTICIPANT_TOTAL, REVEAL_THRESHOLD);
 
       // 3. Per-angel envelope: encrypt under HKDF(share_i)
       setState({ kind: "running", step: "为每位参与者生成专属密文..." });
@@ -250,12 +251,14 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
             </div>
             <div>
               <p className="meta-cap">ready to seal</p>
-              <h2 className="section-title">15 位齐聚 · 45 条心愿齐备</h2>
+              <h2 className="section-title">
+                {PARTICIPANT_TOTAL} 位齐聚 · {PARTICIPANT_TOTAL * WISHES_PER_PERSON} 条心愿齐备
+              </h2>
             </div>
           </div>
 
           <p className="lede">
-            按下朱印之后，浏览器将在本地：生成配对、拆分主密钥为 15 把、把每份心愿封入对应天使的信。
+            按下朱印之后，浏览器将在本地：生成配对、拆分主密钥为 {PARTICIPANT_TOTAL} 把、把每份心愿封入对应天使的信。
             所有明文会随即销毁——连你这位管理员也再无法看到。
           </p>
 
@@ -302,8 +305,10 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
               缄
             </div>
             <div>
-              <p className="meta-cap">sealed · 15 keys minted</p>
-              <h2 className="section-title">十五把钥匙 · 一对一分发</h2>
+              <p className="meta-cap">sealed · {PARTICIPANT_TOTAL} keys minted</p>
+              <h2 className="section-title">
+                {PARTICIPANT_TOTAL === 4 ? "四" : PARTICIPANT_TOTAL === 15 ? "十五" : PARTICIPANT_TOTAL}把钥匙 · 一对一分发
+              </h2>
             </div>
           </div>
 
@@ -342,7 +347,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
               style={{ width: 16, height: 16 }}
             />
             <span style={{ fontSize: 14 }}>
-              十五把钥匙已当面逐一交付。可以清空本页了。
+              {PARTICIPANT_TOTAL === 4 ? "四" : PARTICIPANT_TOTAL === 15 ? "十五" : PARTICIPANT_TOTAL}把钥匙已当面逐一交付。可以清空本页了。
             </span>
           </label>
 

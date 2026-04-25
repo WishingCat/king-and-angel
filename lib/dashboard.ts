@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { PARTICIPANT_TOTAL } from "@/lib/config";
 import type {
   AngelEnvelope,
   PreSealWish,
@@ -8,7 +9,7 @@ import type {
   TaskWithClaimer,
 } from "@/lib/types";
 
-export const PARTICIPANT_TOTAL = 15;
+export { PARTICIPANT_TOTAL };
 
 export async function getSealState(): Promise<SealState> {
   const admin = createAdminClient();

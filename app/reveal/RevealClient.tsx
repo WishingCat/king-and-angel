@@ -8,9 +8,10 @@ import {
 } from "@/lib/crypto/aead";
 import { utf8Encode } from "@/lib/crypto/encoding";
 import { combineShares } from "@/lib/crypto/sss";
+import { REVEAL_THRESHOLD } from "@/lib/config";
 import type { SealedPairing } from "@/lib/types";
 
-const THRESHOLD = 10;
+const THRESHOLD = REVEAL_THRESHOLD;
 const ORDINALS = ["其一", "其二", "其三"] as const;
 
 type Pair = {

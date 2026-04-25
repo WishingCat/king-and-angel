@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getProfileOrThrow, requireUser } from "@/lib/auth";
+import { PARTICIPANT_TOTAL } from "@/lib/config";
 
 export type SealEnvelopePayload = {
   angel_user_id: string;
@@ -31,8 +32,8 @@ export async function publishSealAction(input: PublishSealInput): Promise<Publis
     return { ok: false, error: "你没有管理员权限。" };
   }
 
-  if (!Array.isArray(input?.envelopes) || input.envelopes.length !== 15) {
-    return { ok: false, error: "envelope 数量必须等于 15。" };
+  if (!Array.isArray(input?.envelopes) || input.envelopes.length !== PARTICIPANT_TOTAL) {
+    return { ok: false, error: `envelope 数量必须等于 ${PARTICIPANT_TOTAL}。` };
   }
 
   if (!input.pairing?.ct || !input.pairing.iv || !input.pairing.manifest_sha256) {

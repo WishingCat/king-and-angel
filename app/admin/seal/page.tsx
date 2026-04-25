@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getProfileOrThrow, requireUser } from "@/lib/auth";
 import { fetchSealInputsAction } from "@/app/admin/seal/actions";
 import { SealRunner } from "@/app/admin/seal/SealRunner";
+import { PARTICIPANT_TOTAL } from "@/lib/config";
 
 export default async function SealPage() {
   const user = await requireUser();
@@ -33,7 +34,7 @@ export default async function SealPage() {
             为这一季，<em>按下朱印</em>
           </h1>
           <p className="lede">
-            所有配对与加密都在你的这台浏览器内完成。服务器只会收到密文，以及 15 份分发名单。
+            所有配对与加密都在你的这台浏览器内完成。服务器只会收到密文，以及 {PARTICIPANT_TOTAL} 份分发名单。
             封缄一旦完成，<strong>任何管理员</strong>都不能再次进入这个页面重做。
           </p>
         </section>
