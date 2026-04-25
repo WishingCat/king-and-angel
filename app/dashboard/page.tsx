@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { FormMessage } from "@/components/FormMessage";
 import { SignOutButton } from "@/components/SignOutButton";
-import { KingReveal } from "@/app/dashboard/KingReveal";
 import { BoardTabs } from "@/app/dashboard/BoardTabs";
+import { LettersTabs } from "@/app/dashboard/LettersTabs";
 import { WishEditor } from "@/app/dashboard/WishEditor";
 import {
   getAdminSummary,
   getParticipantDashboard,
   PARTICIPANT_TOTAL,
 } from "@/lib/dashboard";
+import { REVEAL_THRESHOLD } from "@/lib/config";
 import { getProfileOrThrow, requireUser } from "@/lib/auth";
 
 type PageProps = {
@@ -71,78 +72,125 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           ) : null}
         </section>
 
-        <div className="rule">
-          <span className="rule-dot" />
-          <span className="meta-cap">the letters</span>
-          <span className="rule-dot" />
-        </div>
-
-        <section className="sheet sheet-xl rise" style={{ marginBottom: 32 }}>
-          <div className="row-between mb-2" style={{ alignItems: "baseline" }}>
-            <div>
-              <span className="chapter-no">
-                <span className="chapter-label">其一</span>
-                <span>三条心愿</span>
-              </span>
-              <h2 className="section-title">写一封给自己国王的预告</h2>
+        {sealed ? (
+          <>
+            {/* Post-seal: the social boards become the primary surface */}
+            <div className="rule">
+              <span className="rule-dot" />
+              <span className="meta-cap">the wall & the board</span>
+              <span className="rule-dot" />
             </div>
-            <span className="meta-cap">{ownWishCount} / 3 writ</span>
-          </div>
-          <p className="section-subtitle mb-3">
-            不必工整，不必完美。一件想被陪伴的小事就够了。封缄前可反复修改；封缄之后，
-            这三条心愿只出现在对应天使的信里。
-          </p>
 
-          <WishEditor
-            initialWishes={participant.ownWishes}
-            sealStatus={participant.sealState.status}
-          />
-        </section>
+            <section className="rise" style={{ marginTop: 32, marginBottom: 48 }}>
+              <BoardTabs
+                messages={participant.messages}
+                tasks={participant.tasks}
+                currentUserId={user.id}
+              />
+            </section>
 
-        <section className="sheet sheet-xl rise" style={{ marginBottom: 32 }}>
-          <div className="row-between mb-2" style={{ alignItems: "baseline" }}>
-            <div>
-              <span className="chapter-no">
-                <span className="chapter-label">其二</span>
-                <span>开启信笺</span>
-              </span>
-              <h2 className="section-title">我的国王，在这封信里</h2>
+            <div className="rule">
+              <span className="rule-dot" />
+              <span className="meta-cap">the letters</span>
+              <span className="rule-dot" />
             </div>
-          </div>
-          <p className="section-subtitle mb-3">
-            封缄之后，你将收到一把专属的钥匙。只有这把钥匙能在这台浏览器上拆开你那封信。
-          </p>
 
-          {!sealed ? (
-            <div className="empty-note">
-              — 尚未封缄。等待 {PARTICIPANT_TOTAL} 人齐聚，且每人都备好三条心愿。 —
-              <div className="mt-1 meta-cap" style={{ fontStyle: "normal", fontFamily: "var(--f-han)" }}>
-                登记 {participant.stats.participantCount} / {PARTICIPANT_TOTAL}
-                　·　心愿 {participant.stats.wishFilledCount} / {PARTICIPANT_TOTAL * 3}
+            <section className="rise" style={{ marginTop: 32, marginBottom: 32 }}>
+              <LettersTabs
+                angelEnvelope={participant.angelEnvelope}
+                userId={user.id}
+                ownWishCount={ownWishCount}
+                pendingShare={participant.pendingShare}
+              />
+            </section>
+
+            <section className="sheet sheet-xl rise" style={{ marginBottom: 32 }}>
+              <div className="row-between" style={{ alignItems: "baseline", flexWrap: "wrap", gap: 16 }}>
+                <div>
+                  <span className="chapter-no">
+                    <span className="chapter-label">群体揭示</span>
+                    <span>the round table</span>
+                  </span>
+                  <h2 className="section-title">{REVEAL_THRESHOLD} 把钥匙合一，方见全图</h2>
+                  <p className="section-subtitle" style={{ marginTop: 6 }}>
+                    这是面对面的仪式：≥ {REVEAL_THRESHOLD} 位同行者各自把钥匙输入同一台浏览器，
+                    Shamir 在本地合出主密钥，整张配对地图便会一次性展开。
+                  </p>
+                </div>
+                <Link className="button" href="/reveal">
+                  前往揭示仪式 →
+                </Link>
               </div>
+            </section>
+          </>
+        ) : (
+          <>
+            {/* Pre-seal: writing wishes is the headline task */}
+            <div className="rule">
+              <span className="rule-dot" />
+              <span className="meta-cap">the letters</span>
+              <span className="rule-dot" />
             </div>
-          ) : participant.angelEnvelope ? (
-            <KingReveal envelope={participant.angelEnvelope} userId={user.id} />
-          ) : (
-            <div className="alert alert-error">
-              未在本账户找到专属信封——请联系管理员确认。
+
+            <section className="sheet sheet-xl rise" style={{ marginBottom: 32 }}>
+              <div className="row-between mb-2" style={{ alignItems: "baseline" }}>
+                <div>
+                  <span className="chapter-no">
+                    <span className="chapter-label">其一</span>
+                    <span>三条心愿</span>
+                  </span>
+                  <h2 className="section-title">写一封给自己国王的预告</h2>
+                </div>
+                <span className="meta-cap">{ownWishCount} / 3 writ</span>
+              </div>
+              <p className="section-subtitle mb-3">
+                不必工整，不必完美。一件想被陪伴的小事就够了。封缄前可反复修改；封缄之后，
+                这三条心愿只出现在对应天使的信里。
+              </p>
+
+              <WishEditor
+                initialWishes={participant.ownWishes}
+                sealStatus={participant.sealState.status}
+              />
+            </section>
+
+            <section className="sheet sheet-xl rise" style={{ marginBottom: 32 }}>
+              <div className="row-between mb-2" style={{ alignItems: "baseline" }}>
+                <div>
+                  <span className="chapter-no">
+                    <span className="chapter-label">其二</span>
+                    <span>开启信笺</span>
+                  </span>
+                  <h2 className="section-title">我的国王，在这封信里</h2>
+                </div>
+              </div>
+              <p className="section-subtitle mb-3">
+                封缄之后，你将收到一把专属的钥匙。只有这把钥匙能在这台浏览器上拆开你那封信。
+              </p>
+              <div className="empty-note">
+                — 尚未封缄。等待 {PARTICIPANT_TOTAL} 人齐聚，且每人都备好三条心愿。 —
+                <div className="mt-1 meta-cap" style={{ fontStyle: "normal", fontFamily: "var(--f-han)" }}>
+                  登记 {participant.stats.participantCount} / {PARTICIPANT_TOTAL}
+                  　·　心愿 {participant.stats.wishFilledCount} / {PARTICIPANT_TOTAL * 3}
+                </div>
+              </div>
+            </section>
+
+            <div className="rule">
+              <span className="rule-dot" />
+              <span className="meta-cap">the wall & the board</span>
+              <span className="rule-dot" />
             </div>
-          )}
-        </section>
 
-        <div className="rule">
-          <span className="rule-dot" />
-          <span className="meta-cap">the wall & the board</span>
-          <span className="rule-dot" />
-        </div>
-
-        <section className="rise" style={{ marginTop: 32, marginBottom: 32 }}>
-          <BoardTabs
-            messages={participant.messages}
-            tasks={participant.tasks}
-            currentUserId={user.id}
-          />
-        </section>
+            <section className="rise" style={{ marginTop: 32, marginBottom: 32 }}>
+              <BoardTabs
+                messages={participant.messages}
+                tasks={participant.tasks}
+                currentUserId={user.id}
+              />
+            </section>
+          </>
+        )}
 
         {adminSummary ? (
           <>

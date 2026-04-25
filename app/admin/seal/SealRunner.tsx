@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   aesGcmEncryptString,
   exportRawAesKey,
@@ -14,6 +14,7 @@ import { splitSecret } from "@/lib/crypto/sss";
 import { PARTICIPANT_TOTAL, REVEAL_THRESHOLD, WISHES_PER_PERSON } from "@/lib/config";
 import {
   publishSealAction,
+  type PendingSharePayload,
   type SealEnvelopePayload,
   type SealedPairingPayload,
 } from "@/app/admin/seal/actions";
@@ -27,50 +28,16 @@ type Props = {
   alreadySealed: boolean;
 };
 
-type ShareLine = {
+type DeliveredRow = {
   participantId: string;
   participantName: string;
-  share: string;
 };
 
 type RunState =
   | { kind: "idle" }
   | { kind: "running"; step: string }
-  | { kind: "ready"; shares: ShareLine[] }
+  | { kind: "delivered"; rows: DeliveredRow[] }
   | { kind: "error"; message: string };
-
-// Once the admin's browser has computed shares, we cache them locally so a
-// page refresh / network hiccup can't lose them. The shares never reach
-// the server — this is purely a local recovery hint.
-const SHARE_RECOVERY_KEY = "king-angel:seal-shares-pending-v1";
-
-function saveSharesLocally(shares: ShareLine[]) {
-  try {
-    sessionStorage.setItem(SHARE_RECOVERY_KEY, JSON.stringify(shares));
-  } catch {
-    // sessionStorage may be disabled; non-fatal.
-  }
-}
-
-function loadLocalShares(): ShareLine[] | null {
-  try {
-    const raw = sessionStorage.getItem(SHARE_RECOVERY_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as ShareLine[];
-    if (!Array.isArray(parsed) || parsed.length === 0) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function clearLocalShares() {
-  try {
-    sessionStorage.removeItem(SHARE_RECOVERY_KEY);
-  } catch {
-    // ignore
-  }
-}
 
 function buildDerangement(ids: string[]): string[] {
   if (ids.length < 2) {
@@ -95,7 +62,6 @@ function buildDerangement(ids: string[]): string[] {
     }
   }
 
-  // Fallback: rotate by 1 — guaranteed derangement for n >= 2.
   return ids.map((_, i) => ids[(i + 1) % ids.length]);
 }
 
@@ -111,18 +77,6 @@ function groupWishes(wishes: WishRow[]): Map<string, string[]> {
 
 export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
   const [state, setState] = useState<RunState>({ kind: "idle" });
-  const [acknowledged, setAcknowledged] = useState(false);
-
-  // Recovery: if the seal is already published and this browser still has
-  // share material in sessionStorage, surface it so the admin can finish
-  // distributing instead of being told "already sealed, see the DBA".
-  useEffect(() => {
-    if (!alreadySealed) return;
-    const recovered = loadLocalShares();
-    if (recovered && recovered.length === PARTICIPANT_TOTAL) {
-      setState({ kind: "ready", shares: recovered });
-    }
-  }, [alreadySealed]);
 
   const wishMap = useMemo(() => groupWishes(wishes), [wishes]);
   const everyoneHasThree = useMemo(
@@ -130,7 +84,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
     [profiles, wishMap],
   );
 
-  if (alreadySealed && state.kind !== "ready") {
+  if (alreadySealed && state.kind !== "delivered") {
     return (
       <div className="stack" style={{ gap: 18 }}>
         <div className="row gap-md" style={{ alignItems: "center" }}>
@@ -143,7 +97,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
           </div>
         </div>
         <p className="lede">
-          任何管理员都无法在页面上再次执行封缄。如确实需要重做，请联系数据库管理员手工处理。
+          钥匙已派发到对应参与者的 dashboard。任何管理员都无法在页面上再次执行封缄。
         </p>
       </div>
     );
@@ -185,7 +139,8 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
       // 3. Per-angel envelope: encrypt under HKDF(share_i)
       setState({ kind: "running", step: "为每位参与者生成专属密文..." });
       const envelopes: SealEnvelopePayload[] = [];
-      const shareLines: ShareLine[] = [];
+      const shares: PendingSharePayload[] = [];
+      const deliveredRows: DeliveredRow[] = [];
       const fullPairing: Array<{
         angel_id: string;
         angel_name: string;
@@ -211,7 +166,6 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
         });
 
         const shareBytes = base64UrlToBytes(shareStrings[i]);
-
         const personalKey = await deriveAesKeyFromShare(shareBytes);
         const ciphertext = await aesGcmEncryptString(personalKey, envelopePlaintext);
 
@@ -221,10 +175,14 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
           iv: ciphertext.iv,
         });
 
-        shareLines.push({
+        shares.push({
+          user_id: angelId,
+          share: shareStrings[i],
+        });
+
+        deliveredRows.push({
           participantId: angelId,
           participantName: angelName,
-          share: shareStrings[i],
         });
 
         fullPairing.push({
@@ -252,39 +210,31 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
         manifest_sha256: manifest,
       };
 
-      // 5. Save shares to sessionStorage BEFORE submit, so a network glitch
-      //    or refresh during the publish RPC can't strand us with a sealed
-      //    DB but no shares to hand out. The recovery branch on mount picks
-      //    these up if the seal succeeded but this page never rendered them.
-      saveSharesLocally(shareLines);
-
-      // 6. Submit to server (atomic via publish_seal RPC).
-      setState({ kind: "running", step: "提交封印..." });
-      const result = await publishSealAction({ envelopes, pairing });
+      // 5. Submit to server (atomic via publish_seal RPC).
+      // The server transaction inserts envelopes + sealed_pairing + pending_shares
+      // in one go. After this, the admin's browser drops every shred of share
+      // material from memory.
+      setState({ kind: "running", step: "提交封印 · 写入各位 dashboard..." });
+      const result = await publishSealAction({ envelopes, pairing, shares });
 
       if (!result.ok) {
-        // Seal didn't go through — the local copy isn't useful; drop it.
-        clearLocalShares();
         setState({ kind: "error", message: result.error });
         return;
       }
 
-      // 7. Wipe local sensitive data — do this last so even crashes earlier
-      //    don't leave half-published state.
+      // 6. Wipe local sensitive data.
       void activityKeyBytes.fill(0);
+      shares.length = 0;
+      shareStrings.length = 0;
 
-      setState({ kind: "ready", shares: shareLines });
+      setState({ kind: "delivered", rows: deliveredRows });
     } catch (err) {
       const message = err instanceof Error ? err.message : "封印过程发生未知错误。";
       setState({ kind: "error", message });
     }
   }
 
-  function wipeAndExit() {
-    clearLocalShares();
-    setState({ kind: "idle" });
-    setAcknowledged(false);
-    // Force a reload to ensure no in-memory share material lingers.
+  function exitToDashboard() {
     window.location.href = "/dashboard?success=" + encodeURIComponent("封印完成。");
   }
 
@@ -306,11 +256,11 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
 
           <p className="lede">
             按下朱印之后，浏览器将在本地：生成配对、拆分主密钥为 {PARTICIPANT_TOTAL} 把、把每份心愿封入对应天使的信。
-            所有明文会随即销毁——连你这位管理员也再无法看到。
+            随后，{PARTICIPANT_TOTAL} 把钥匙会被写入对应参与者的 dashboard，由他们各自登录领取后销毁。
           </p>
 
           <div className="alert alert-error">
-            <strong>一次性仪式。</strong>执行之后任何管理员都无法再回到此页。请在所有参与者都在场时进行。
+            <strong>一次性仪式。</strong>执行之后任何管理员都无法再回到此页。
           </div>
 
           <div className="row gap-md">
@@ -345,75 +295,48 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
         </>
       ) : null}
 
-      {state.kind === "ready" ? (
+      {state.kind === "delivered" ? (
         <>
           <div className="row gap-md" style={{ alignItems: "center" }}>
             <div className="seal-stamp" aria-hidden="true">
               缄
             </div>
             <div>
-              <p className="meta-cap">sealed · {PARTICIPANT_TOTAL} keys minted</p>
-              <h2 className="section-title">
-                {PARTICIPANT_TOTAL === 4 ? "四" : PARTICIPANT_TOTAL === 15 ? "十五" : PARTICIPANT_TOTAL}把钥匙 · 一对一分发
-              </h2>
+              <p className="meta-cap">sealed · {PARTICIPANT_TOTAL} keys delivered</p>
+              <h2 className="section-title">钥匙已分发到各位 dashboard</h2>
             </div>
           </div>
 
-          {alreadySealed ? (
-            <div className="alert alert-error">
-              <strong>从本地恢复的钥匙。</strong>
-              检测到之前在这个浏览器里完成过封缄但未确认分发——下面是当时生成的钥匙。
-              请仔细核对每位参与者的名字是否对应正确，再继续分发。
-            </div>
-          ) : null}
-
           <p className="lede">
-            下面每一把钥匙，请<strong>当面</strong>交给对应的参与者（纸条 · 私聊 · 当面口述）。
-            离开本页之后钥匙不会再显示——服务器和数据库里都没有它们的痕迹。
+            {PARTICIPANT_TOTAL} 把钥匙已写入对应参与者的 dashboard。
+            请通知大家登录 <span className="meta-cap" style={{ fontFamily: "var(--f-han)" }}>/dashboard</span>
+            ，把自己的那把钥匙复制保存到任意安全的地方（笔记 / 截图 / 密码管理器），
+            然后在页面上点 “我已收下” 销毁。
           </p>
 
           <div className="registry sheet-plain" style={{ padding: 0 }}>
-            {state.shares.map((line, idx) => (
-              <div className="registry-row" style={{ padding: "16px 18px" }} key={line.participantId}>
+            {state.rows.map((row, idx) => (
+              <div className="registry-row" style={{ padding: "16px 18px" }} key={row.participantId}>
                 <div>
                   <div className="meta-cap">
-                    №{(idx + 1).toString().padStart(2, "0")} · for
+                    №{(idx + 1).toString().padStart(2, "0")} · awaiting pickup
                   </div>
-                  <div className="registry-name">{line.participantName}</div>
+                  <div className="registry-name">{row.participantName}</div>
                 </div>
-                <div className="share-chip">{line.share}</div>
+                <div className="meta-cap" style={{ fontStyle: "normal", fontFamily: "var(--f-han)" }}>
+                  已写入 dashboard
+                </div>
               </div>
             ))}
           </div>
 
-          <label
-            className="row gap-md"
-            style={{
-              padding: "12px 14px",
-              border: "1px dashed var(--rule)",
-              borderRadius: "var(--r-md)",
-              background: "var(--paper-soft)",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={acknowledged}
-              onChange={(event) => setAcknowledged(event.target.checked)}
-              style={{ width: 16, height: 16 }}
-            />
-            <span style={{ fontSize: 14 }}>
-              {PARTICIPANT_TOTAL === 4 ? "四" : PARTICIPANT_TOTAL === 15 ? "十五" : PARTICIPANT_TOTAL}把钥匙已当面逐一交付。可以清空本页了。
-            </span>
-          </label>
+          <p className="footer-note">
+            服务器会在 7 天后自动清空尚未被领取的钥匙——若有人未及时登录，钥匙会消失，活动需要重新封缄。
+          </p>
 
           <div>
-            <button
-              type="button"
-              className="button"
-              disabled={!acknowledged}
-              onClick={wipeAndExit}
-            >
-              分发完毕 · 清空并离开
+            <button type="button" className="button" onClick={exitToDashboard}>
+              完成 · 离开
             </button>
           </div>
         </>

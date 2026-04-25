@@ -35,6 +35,7 @@ export async function getParticipantDashboard(userId: string) {
     { count: wishFilledCount },
     { data: ownWishRows },
     { data: envelopeRow },
+    { data: pendingShareRow },
     { data: messages },
     { data: taskRows },
   ] = await Promise.all([
@@ -50,6 +51,11 @@ export async function getParticipantDashboard(userId: string) {
       .from("angel_envelopes")
       .select("angel_user_id, ct, iv, created_at")
       .eq("angel_user_id", userId)
+      .maybeSingle(),
+    admin
+      .from("pending_shares")
+      .select("share")
+      .eq("user_id", userId)
       .maybeSingle(),
     admin
       .from("public_messages")
@@ -107,6 +113,7 @@ export async function getParticipantDashboard(userId: string) {
     },
     ownWishes: (ownWishRows ?? []) as PreSealWish[],
     angelEnvelope: (envelopeRow as AngelEnvelope | null) ?? null,
+    pendingShare: (pendingShareRow?.share ?? null) as string | null,
     messages: (messages ?? []) as PublicMessage[],
     tasks,
   };

@@ -17,9 +17,15 @@ export type SealedPairingPayload = {
   manifest_sha256: string;
 };
 
+export type PendingSharePayload = {
+  user_id: string;
+  share: string;
+};
+
 type PublishSealInput = {
   envelopes: SealEnvelopePayload[];
   pairing: SealedPairingPayload;
+  shares: PendingSharePayload[];
 };
 
 export type PublishSealResult = { ok: true } | { ok: false; error: string };
@@ -40,10 +46,15 @@ export async function publishSealAction(input: PublishSealInput): Promise<Publis
     return { ok: false, error: "sealed_pairing 缺少字段。" };
   }
 
+  if (!Array.isArray(input?.shares) || input.shares.length !== PARTICIPANT_TOTAL) {
+    return { ok: false, error: `shares 数量必须等于 ${PARTICIPANT_TOTAL}。` };
+  }
+
   const admin = createAdminClient();
   const { error } = await admin.rpc("publish_seal", {
     envelopes: input.envelopes,
     pairing: input.pairing,
+    shares: input.shares,
   });
 
   if (error) {

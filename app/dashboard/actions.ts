@@ -154,3 +154,22 @@ export async function signOutFromDashboardAction() {
   await supabase.auth.signOut();
   redirect("/auth?success=已退出登录。");
 }
+
+// Burn-after-read: caller deletes their own pending_shares row.
+// RLS scopes the DELETE to user_id = auth.uid(), so even if someone passed
+// arbitrary args the policy would reject any other user's row.
+export async function consumeOwnShareAction(): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  const user = await requireUser();
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("pending_shares")
+    .delete()
+    .eq("user_id", user.id);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
