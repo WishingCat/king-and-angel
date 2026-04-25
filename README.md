@@ -8,8 +8,8 @@
 - 每位参与者收到一把**专属密钥**（Shamir share），登录账户后输入密钥即可看到自己的国王和心愿
 - 任意 **k / n** 份密钥合在一起，可以在浏览器内重组主密钥，解密完整配对（用于活动结束后的揭示仪式）
 
-> ⚙️ **当前仓库已切到 4 人测试版**（n=4, k=3）。正式版为 15 人 / 45 心愿 / 10 揭示。
-> 单一真相源：[`lib/config.ts`](./lib/config.ts)。详见「§9 切换活动规模」。
+> ⚙️ **当前仓库为 15 人正式版**（n=15, k=10, 45 心愿）。要切回 4 人测试版需要改代码 + 写新 migration，详见「§9 切换活动规模」。
+> 单一真相源：[`lib/config.ts`](./lib/config.ts)。
 
 ---
 
@@ -18,8 +18,10 @@
 | 文档 | 给谁看 | 内容 |
 |---|---|---|
 | **[USER_GUIDE.md](./USER_GUIDE.md)** | **参与活动的同学** | 怎么注册 / 怎么写心愿 / 怎么用密钥解锁国王 / 怎么参加揭示仪式 |
-| **[DEPLOY.md](./DEPLOY.md)** | 部署的人 | Cloudflare Pages + Supabase 完整部署步骤 |
-| 本文档（README.md） | 开发者 / 维护者 | 项目架构、SQL 迁移、活动 SOP、安全模型、调试技巧 |
+| **[DEPLOY.md](./DEPLOY.md)** | 部署的人 | Cloudflare Workers (via OpenNext) + Supabase 完整部署步骤 |
+| **[MATCHING.md](./MATCHING.md)** | 想理解配对算法的人 | derangement 算法、Shamir 拆分、概率分析、潜在改造方向 |
+| **[CLAUDE.md](./CLAUDE.md)** | Claude Code（AI 助手） | 仓库的"big picture"知识，给 AI 接手时看 |
+| 本文档（README.md） | 开发者 / 维护者 | 项目架构、迁移工作流、活动 SOP、安全模型、调试技巧 |
 
 ---
 
@@ -43,28 +45,50 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 ## 2. 初始化 Supabase
 
-1. 新建 Supabase 项目
-2. 打开 SQL Editor
-3. **依次** 运行：
-   - `sql/01_schema.sql`（仅用于建立 `profiles` / `invites` 等基础表，新版会丢弃其中的旧业务表）
-   - `sql/02_e2e_schema.sql`（删除旧业务表 + 创建 `pre_seal_wishes`、`angel_envelopes`、`sealed_pairing`、`seal_state`、`public_messages`、`tasks` + 加密所需 RPC）
-4. Authentication > Providers：保持邮箱/密码登录开启
-5. Authentication > Settings：测试期可关闭邮箱确认
+仓库使用 **Supabase CLI 工作流**，schema 通过 `supabase/migrations/*.sql` 版本化管理。
+
+```bash
+# 1. 安装 CLI（macOS）
+brew install supabase/tap/supabase
+
+# 2. 登录 + 关联远程项目
+supabase login
+supabase link --project-ref <你的项目 ref>
+
+# 3. 推送所有 migration（直连 db.<ref>.supabase.co 经常被 TUN 模式代理拦截，
+#    用 connection pooler 更稳）
+supabase db push --db-url "postgresql://postgres.<REF>:<PASSWORD>@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
+
+# 4. 推 auth 配置（关闭邮箱确认 + 设置 site_url 等）
+supabase config push
+```
+
+migrations 顺序：
+
+| 文件 | 内容 |
+|---|---|
+| `supabase/migrations/...001_initial_schema.sql` | profiles / invites / activity_settings 基础表 |
+| `supabase/migrations/...002_e2e_schema.sql` | 加密版业务表（pre_seal_wishes / angel_envelopes / sealed_pairing / seal_state / public_messages / tasks）+ claim_task / complete_task RPC |
+| `supabase/migrations/...003_pending_shares.sql` | pending_shares 表（burn-after-read 分发）+ 3 参数 publish_seal RPC + pg_cron 7 天清理 |
+| `supabase/migrations/...004_scale_to_15.sql` | 把 publish_seal 的 expected_total 从 4 改到 15 |
+
+> `sql/01_schema.sql` 和 `sql/02_e2e_schema.sql` 是**历史 baseline**（migrations 001/002 的来源），不要再编辑它们来改 schema——以后改 schema 走"写新 migration"路径。
 
 ---
 
 ## 3. 邀请码与角色
 
-`sql/01_schema.sql` 仍提供 `invites` 表。每位参与者一个邀请码，`can_admin = true` 的账号可以执行封印。
+`invites` 表存储邀请码 + 显示姓名 + 是否管理员。每位参与者一个邀请码，`can_admin = true` 的账号可以执行封印。
 
-**当前测试版**：4 个预置邀请码（`ADMIN` 管理员 + `A1001`/`A1002`/`A1003` 普通）。
-**正式版**：把 `01_schema.sql` 末尾示例邀请码扩展成 15 个真实名单，其中 2 个 `can_admin = true`，他们也参与配对。
+**当前正式版**：15 条邀请码，格式 `YC` + 出生日期 `YYYYMMDD`，2 位管理员（涂增基 / 王键豪）的邀请码末尾带 `ADMIN` 后缀（例如 `YC20020323ADMIN`）。
+
+如果要换名单，直接进 Supabase Dashboard SQL Editor 改 `public.invites` 表，或写一条新 migration。
 
 ---
 
 ## 4. 使用流程（活动 SOP）
 
-> 下文用 N 表示 `PARTICIPANT_TOTAL`（当前 4，正式版 15），用 K 表示 `REVEAL_THRESHOLD`（当前 3，正式版 10）。
+> 下文用 N 表示 `PARTICIPANT_TOTAL`（当前 **15**），K 表示 `REVEAL_THRESHOLD`（当前 **10**）。
 
 ### 4.1 注册阶段
 
@@ -90,23 +114,28 @@ SUPABASE_SERVICE_ROLE_KEY=...
 2. 点击「按下朱印 · 封缄这一季」
 3. 浏览器在本地：
    - 拉取 N 人 + 全部心愿
-   - 生成配对（Fisher-Yates 洗牌 + 保证不自配）
+   - 生成配对（Fisher-Yates 洗牌 + 保证不自配，详见 [`MATCHING.md`](./MATCHING.md)）
    - 生成主密钥 `ACTIVITY_KEY`
    - Shamir 拆成 N 份（K / N 门槛）
    - 为每个人生成一份「envelope」：用 `HKDF(自己的 share)` 加密 `{国王名字, 国王 3 条心愿}`
    - 生成 `sealed_pairing`：用 `ACTIVITY_KEY` 加密完整配对
-4. 通过单次原子事务上传：插入 envelopes + 插入 sealed_pairing + 翻转 `seal_state` 为 published + 删除全部 `pre_seal_wishes`
-5. 页面显示 N 份 share 和参与者名字对照表
-6. **当面把每份 share 分发给对应同学**（推荐写在纸条上、私聊、或当面口述）
-7. 勾选「我已分发完毕」并点确认 → 页面跳转返回，share 在浏览器内存中销毁
+4. 通过单次原子事务上传：插入 envelopes + 插入 sealed_pairing + **插入 N 条 pending_shares** + 翻转 `seal_state` 为 published + truncate 全部 `pre_seal_wishes`
+5. 管理员屏幕**只显示 N 个名字 + "已写入对应 dashboard"** —— share 字符串永远不会出现在管理员屏幕上
+6. 管理员通知 N 位参与者上线领取自己的钥匙（详见 4.4）
 
-### 4.4 活动期间
+### 4.4 活动期间（领钥匙 + 解信）
 
-- 每人登录控制台 → 「我的国王」一栏显示密钥输入框
-- 粘贴自己的 share → 浏览器本地解密 envelope → 看到国王 + 3 条心愿
+每位参与者各自登录控制台后会看到：
+
+- **首次进入**（自己的 `pending_shares` 行还在时）：「其二·开启信笺」标签上方出现 `ShareClaim` 卡片，显示自己的 share 字符串、一键复制按钮、销毁按钮
+- 参与者把 share 复制保存到任意安全的地方（笔记 / 密码管理器 / 截图）
+- 必须勾选"我已保存"复选框 → 点红色销毁按钮 → 服务器 RLS-scoped DELETE 自己那条 `pending_shares` → 卡片消失，之后再也不能从服务器取回这把 share
+- 卡片消失后，露出 `KingReveal` 输入框：粘贴刚才复制的 share → 浏览器本地 HKDF 出 personal_key → 解开 envelope → 看到自己的国王 + 3 条心愿
 - 解密后的 personal_key 缓存在本机 IndexedDB（non-extractable CryptoKey），下次登录自动展示
 - 12 小时后自动失效，需要重新输入
-- 也可以点「在此设备锁定 / 清除本地密钥」手动清除
+- 也可以点登出按钮手动清除
+
+> ⏰ **7 天兜底**：`pg_cron` 任务 `cleanup-pending-shares` 每天 03:17 删除创建超过 7 天的 pending_shares 行。如果某位参与者一直不登录，他的 share 会被自动清掉——之后既看不到自己的国王，也无法参与揭示。封缄前要确保 N 位都能在 7 天内上线领取。
 
 留言板和任务板**与 share 无关**，登录即用。
 
@@ -130,6 +159,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
 | 运营者 / DBA | 心愿明文 | 仅限**封印前**的填写窗口（封印成功后立即销毁） |
 | 运营者 / DBA | 留言 / 任务标题 / 任务描述 | 能看到内容（明文），但 DB 表无 sender/uploader 字段，看不到是谁发的 |
 | 运营者 / DBA | 配对关系 | **永远看不到**（除非拿到 ≥ K 份 share） |
+| 运营者 / DBA | 某位用户的 share | 仅限**封缄完成 → 该用户点销毁按钮**之间的窗口（最长 7 天）。RLS 阻止其他普通用户看到，但 service_role 可以读 |
 | 某位参与者 | 自己的国王 + 3 条心愿 | 输入自己 share 后 |
 | 某位参与者 | 其他人的国王 / 心愿 | **永远看不到** |
 | 某位参与者 | 留言 / 任务 | 登录即可（无需 share） |
@@ -138,10 +168,11 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 **关键限制**：
 
-- 如果用户把自己的 share 弄丢了，活动期间**没法再看到自己的国王**——这是设计内的不可恢复。但只要不影响群体揭示（其他 K 人健在），最终仍能解锁全貌。
+- 如果用户把自己的 share 弄丢了（销毁按钮已经按过），活动期间**没法再看到自己的国王**——这是设计内的不可恢复。但只要不影响群体揭示（其他 K 人健在），最终仍能解锁全貌。
 - 如果用户主动告诉别人自己的 share，那个人也能看到这位用户的国王。
 - 如果 ≥ K 位参与者私下合谋，他们可以提前揭示完整配对——这正是 K / N 门槛的本意。
 - 封印时管理员的浏览器在内存里短暂持有过完整配对。建议封印仪式当面进行，事后立即关闭浏览器、清理 history。
+- **share 在 `pending_shares` 表里的窗口期**是这套机制相对最弱的一环。如果担心备份泄露，可以在 Supabase Dashboard → Settings → Database → Backups 缩短或关闭自动备份。
 
 ---
 
@@ -151,9 +182,9 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 最简部署（约 10 分钟）：
 
-1. 在 Supabase 新建项目，跑两份 `sql/*.sql`，抄 3 个 key
-2. 在 Cloudflare Pages 新建项目 → Connect to Git → 填 4 个环境变量
-3. Save and Deploy
+1. 在 Supabase 新建项目，按 §2 用 `supabase db push` 把 migrations 全部应用上去
+2. `wrangler login`，然后 `wrangler secret put NEXT_PUBLIC_SUPABASE_URL --name king-and-angel`、`NEXT_PUBLIC_SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY` 三个 secret 喂给 Worker
+3. `npm run deploy`
 
 无需修改任何代码文件，无需在控制台手动加 compatibility flag——`wrangler.toml` 和 `open-next.config.ts` 已写好。
 
@@ -163,32 +194,43 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 ```
 app/
-  auth/            # 邀请码 + 邮箱 + 密码注册登录（保持原样）
+  auth/                    # 邀请码 + 邮箱 + 密码注册登录
   dashboard/
-    page.tsx
-    actions.ts
-    WishEditor.tsx       # 3 条心愿
-    KingReveal.tsx       # 输入 share → 解锁国王
-    MessageBoard.tsx     # 匿名留言板
-    TaskBoard.tsx        # 匿名上传 / 实名接取 / 完成
+    page.tsx               # 按 sealed 状态二分布局：未封缄→心愿在顶；已封缄→留言/任务板在顶
+    actions.ts             # 含 consumeOwnShareAction（用户销毁自己的 pending_share）
+    WishEditor.tsx         # 3 条心愿
+    KingReveal.tsx         # 输入 share → 解锁国王
+    ShareClaim.tsx         # ⭐ 已封缄态：burn-after-read 的钥匙领取卡片
+    LettersTabs.tsx        # ⭐ 已封缄态：其二·开启信笺 / 其一·三条心愿 tab 切换
+    BoardTabs.tsx          # 其三·留言墙 / 其四·任务板 tab 切换
+    MessageBoard.tsx       # 匿名留言板
+    TaskBoard.tsx          # 匿名上传 / 实名接取 / 完成
   admin/seal/
     page.tsx
-    actions.ts           # publishSealAction (调用 publish_seal RPC)
-    SealRunner.tsx       # 浏览器内的全部封印逻辑
+    actions.ts             # publishSealAction（3 参数：envelopes / pairing / shares）
+    SealRunner.tsx         # 浏览器内的封印逻辑；不再显示 share，只显示分发完成名单
   reveal/
     page.tsx
-    RevealClient.tsx     # K 份 share 合力解密
+    RevealClient.tsx       # K 份 share 合力解密
 lib/
-  config.ts              # ★ 单一真相源：PARTICIPANT_TOTAL / REVEAL_THRESHOLD
+  config.ts                # ★ 单一真相源：PARTICIPANT_TOTAL / REVEAL_THRESHOLD
+  dashboard.ts             # getParticipantDashboard 含 pending_share 拉取
   crypto/
-    aead.ts              # AES-GCM
-    hkdf.ts              # HKDF(share) → personal AES key
-    sss.ts               # Shamir 包装
-    keystore.ts          # IndexedDB 缓存
-    encoding.ts          # base64 / utf8 helpers
+    aead.ts                # AES-GCM
+    hkdf.ts                # HKDF(share) → personal AES key
+    sss.ts                 # Shamir 包装
+    keystore.ts            # IndexedDB 缓存
+    encoding.ts            # base64 / utf8 helpers
+supabase/
+  migrations/              # ⭐ 当前 schema 真相源；用 supabase db push 应用
+    20260425000001_initial_schema.sql
+    20260425000002_e2e_schema.sql
+    20260425000003_pending_shares.sql      # 加 pending_shares 表 + 3 参 publish_seal + pg_cron
+    20260425000004_scale_to_15.sql         # 把 expected_total 从 4 改到 15
+  config.toml              # auth 配置（关闭邮箱确认 / site_url 等）；用 supabase config push 应用
 sql/
-  01_schema.sql          # 基础 profiles / invites
-  02_e2e_schema.sql      # 加密版业务表 + RPC（含 publish_seal，含硬编码的 expected_total）
+  01_schema.sql            # 历史 baseline（migrations 001 来源），不要再编辑
+  02_e2e_schema.sql        # 历史 baseline（migrations 002 来源），不要再编辑
 ```
 
 ---
@@ -202,50 +244,58 @@ sql/
 
 ---
 
-## 9. 切换活动规模（4 人测试版 ↔ 15 人正式版）
+## 9. 切换活动规模
 
-活动总人数和揭示阈值由 3 个地方共同决定。切换时三处都要改：
+活动规模由 3 处决定，切换时三处都要改：
 
 ### 9.1 代码：`lib/config.ts`
 
 ```ts
-export const PARTICIPANT_TOTAL = 4;   // 正式版改成 15
-export const REVEAL_THRESHOLD  = 3;   // 正式版改成 10
+export const PARTICIPANT_TOTAL = 15;  // 改成你想要的人数
+export const REVEAL_THRESHOLD  = 10;  // 改成你想要的揭示门槛
 ```
 
 代码里所有地方都从这里 import，改完即生效。
 
-### 9.2 数据库：`sql/02_e2e_schema.sql` 的 `publish_seal` RPC
+### 9.2 数据库：写一条新 migration
 
-`publish_seal` 函数里有一行 `expected_total constant int := 4`（或 15）是 **Postgres 函数内的硬编码**——必须在 Supabase SQL Editor 里重新执行 `create or replace function publish_seal(...)` 块。
+`publish_seal` RPC 里 `expected_total constant int := 15` 是函数内的硬编码常量。要改，**写一条新 migration**（不要直接编辑已应用的 migration 文件——那会让本地与远程的 schema_migrations 不一致）。
 
-```sql
-expected_total constant int := 4;   -- 测试版；正式版改成 15
+参考 `supabase/migrations/20260425000004_scale_to_15.sql` 的形式，把里面的 `:= 15` 替换成新数值，然后：
+
+```bash
+supabase db push --db-url "postgresql://postgres.<REF>:<PASSWORD>@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
 ```
 
-### 9.3 邀请码：`sql/01_schema.sql` 末尾的 `insert into invites`
+### 9.3 邀请码
 
-测试版已预置 4 个邀请码（1 管理员 + 3 普通）。正式版需要扩成 15 行真实名单，其中 2 个 `can_admin = true`。
+进 Supabase Dashboard SQL Editor，对 `public.invites` 重新插入相应数量。或写一条 migration 做 upsert。
 
-### 9.4 切换步骤
+### 9.4 切换步骤汇总
 
-1. 改 `lib/config.ts` 里两个常量
-2. 改 `sql/02_e2e_schema.sql` 里的 `expected_total`
-3. 在 Supabase SQL Editor 里**重新执行** `publish_seal` 的 `create or replace function` 块（只需要那一段，不需要整个文件）
-4. 如果数据库已有旧测试数据想清空：
+1. 改 `lib/config.ts` 两个常量
+2. 写新 migration 改 `expected_total`，`supabase db push`
+3. 在 SQL Editor 里清旧数据 + 重置邀请码：
    ```sql
-   delete from public.angel_envelopes;
-   delete from public.sealed_pairing;
-   delete from public.pre_seal_wishes;
-   delete from public.public_messages;
-   delete from public.tasks;
+   begin;
+   truncate table
+     public.pre_seal_wishes,
+     public.angel_envelopes,
+     public.sealed_pairing,
+     public.public_messages,
+     public.tasks,
+     public.pending_shares,
+     public.profiles,
+     public.invites
+   restart identity cascade;
    update public.seal_state set status='open', sealed_at=null where id=1;
-   -- 清理已注册的测试账号
-   delete from auth.users where email like '%test%';
-   delete from public.invites;
+   delete from auth.users where id is not null;
+   insert into public.invites (code, display_name, can_admin) values
+     -- 你的新名单
+     ;
+   commit;
    ```
-5. 用 9.3 写好的新邀请码重新填表
-6. `git add && git commit && git push` → Cloudflare Pages 自动重建
+4. `npm run deploy`（记得先 `rm -rf .next .open-next` 防 Turbopack 字体缓存抽风）
 
 ### 9.5 参数约束
 

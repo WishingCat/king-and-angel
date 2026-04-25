@@ -2,8 +2,8 @@
 
 > **King & Angel · 信笺与封缄** — 用 [`@opennextjs/cloudflare`](https://opennext.js.org/cloudflare) 把 Next.js 16 部署到 Cloudflare Workers，数据库与认证用 Supabase 免费版。
 
-> ⚙️ **当前仓库默认是 4 人测试版**（4 人 + 12 心愿 + 3 人揭示）。
-> 部署完成后想切到 15 人正式版，请按 [§Part 4 切换活动规模](#part-4--切换活动规模) 操作。
+> ⚙️ **当前仓库为 15 人正式版**（15 人 + 45 心愿 + 10 人揭示）。
+> 想切回 4 人测试规模，请按 [§Part 4 切换活动规模](#part-4--切换活动规模) 操作（要写新 migration）。
 
 ---
 
@@ -31,39 +31,43 @@
 4. **Database password**: 系统生成 → 复制存好
 5. Pricing: Free → **Create**（约 2 分钟初始化）
 
-### 1.2 跑两份 SQL 迁移
+### 1.2 应用所有 schema migrations
 
-1. 左侧 **SQL Editor** → **New query**
-2. 复制 `sql/01_schema.sql` 全部内容 → 粘贴 → **Run**
-3. 再 **New query**
-4. 复制 `sql/02_e2e_schema.sql` 全部内容 → 粘贴 → **Run**
+**推荐：用 Supabase CLI**（一键应用本仓库所有 migration，最不容易漏）：
 
-> 这两份会建好所有业务表 + RLS 策略 + `claim_task / complete_task / publish_seal` 三个 RPC。
+```bash
+brew install supabase/tap/supabase           # macOS；其他平台见官方文档
+supabase login
+supabase link --project-ref <你的项目 ref>     # 在 Dashboard URL 里能看到
 
-### 1.3 关闭邮箱确认（测试期）
+# 直连 db.<ref>.supabase.co 经常被 TUN 模式代理拦截，用 pooler 更稳：
+supabase db push --db-url "postgresql://postgres.<REF>:<PASSWORD>@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
+
+# 推 auth 配置（关闭邮箱确认 + 设置 site_url 等）
+supabase config push
+```
+
+**或者：手动在 SQL Editor 跑（4 个文件依次粘贴运行）**：
+- `supabase/migrations/20260425000001_initial_schema.sql`
+- `supabase/migrations/20260425000002_e2e_schema.sql`
+- `supabase/migrations/20260425000003_pending_shares.sql`
+- `supabase/migrations/20260425000004_scale_to_15.sql`
+
+> 这 4 份会建好所有业务表 + RLS 策略 + RPC（含 3 参数版的 publish_seal）+ pg_cron 7 天自动清理 pending_shares。
+
+### 1.3 关闭邮箱确认
+
+如果用了 `supabase config push`，这一步会自动完成。否则手工：
 
 **Authentication** → **Providers** → **Email** → 关闭 **Confirm email** → **Save**
 
-> 这样测试期注册后立刻能登录，不必等收邮件。正式活动前可以再打开。
+> 这样测试期注册后立刻能登录，不必等收邮件——同时也避开了 Supabase 默认 SMTP 的"每小时 3-4 封"严苛限制。
 
 ### 1.4 邀请码
 
-`sql/01_schema.sql` 末尾已预置 4 个测试邀请码：
+migrations 应用完成后，`invites` 表会有一行示例（或者空的，取决于你跑的版本）。15 人正式版的邀请码命名规则：`YC` + 出生日期 `YYYYMMDD`，管理员后加 `ADMIN`，display_name 用「序号+姓名」。
 
-| 邀请码 | 姓名 | 是管理员 |
-|---|---|---|
-| `ADMIN` | 文建负责人 | ✅ |
-| `A1001` | 张三 | |
-| `A1002` | 李四 | |
-| `A1003` | 王五 | |
-
-想换成 4 个真名：
-
-```sql
-update invites set display_name = '小明' where code = 'A1001';
-```
-
-正式版（15 人）的邀请码改造见 [§Part 4](#part-4--切换活动规模)。
+15 人版的完整名单存在仓库的活动数据里——具体 SQL 见 [§Part 4](#part-4--切换活动规模)。
 
 ### 1.5 抄下 3 个凭据
 
@@ -77,41 +81,53 @@ update invites set display_name = '小明' where code = 'A1001';
 
 ---
 
-## Part 2 · Cloudflare Workers（5 分钟）
+## Part 2 · Cloudflare Workers（用 wrangler，5 分钟）
 
-### 2.1 创建项目
+> ⚠️ **不用 Cloudflare Pages 的 Connect to Git 方式**——OpenNext 推荐直接通过 `wrangler` 部署到 Workers，构建在本地完成。
 
-1. 登录 https://dash.cloudflare.com
-2. **Workers & Pages** → **Create**
-3. 选 **Pages** 标签 → **Connect to Git**
-4. 授权访问 GitHub → 选仓库 `WishingCat/king-and-angel`
+### 2.1 本地准备
 
-### 2.2 Build 配置
+```bash
+# 把仓库 clone 下来
+git clone <repo-url>
+cd king_angel_yongchun_app
+npm install
 
-| 字段 | 值 |
-|---|---|
-| Project name | `king-and-angel`（成 URL 一部分：`king-and-angel.pages.dev`） |
-| Production branch | `main` |
-| Framework preset | **Next.js** |
-| Build command | `npx opennextjs-cloudflare build` |
-| Build output directory | `.open-next/assets` |
+# 写本地环境变量（构建时 Next.js 会把 NEXT_PUBLIC_* 内联到客户端 bundle）
+cp .env.example .env.local
+# 然后编辑 .env.local，填上 Part 1.5 抄的三个值
+```
 
-### 2.3 环境变量
+`.env.local` 内容：
 
-往下滚到 **Environment variables**，**Production** 和 **Preview** 都填这 4 个：
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://<你的 ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGc...
+SUPABASE_SERVICE_ROLE_KEY=eyJhbGc...
+```
 
-| 变量名 | 值 | 类型 |
-|---|---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Part 1.5 抄的 URL | Plaintext |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon key | Plaintext |
-| `SUPABASE_SERVICE_ROLE_KEY` | service_role key | **Secret** ⚠️ |
-| `NODE_VERSION` | `20` | Plaintext |
+### 2.2 登录 wrangler 并配置 Worker secret
 
-> **`SUPABASE_SERVICE_ROLE_KEY` 一定要选 Secret 类型**——它能绕过所有 RLS，泄露 = 灾难。
+```bash
+npx wrangler login   # 会打开浏览器走 OAuth
 
-### 2.4 Save and Deploy
+# 把三个值喂给 Worker（runtime 用，跟 .env.local 独立）。
+# 用 stdin 输入避免值进入 shell history：
+grep '^NEXT_PUBLIC_SUPABASE_URL=' .env.local | cut -d= -f2- | tr -d '\n' | npx wrangler secret put NEXT_PUBLIC_SUPABASE_URL --name king-and-angel
+grep '^NEXT_PUBLIC_SUPABASE_ANON_KEY=' .env.local | cut -d= -f2- | tr -d '\n' | npx wrangler secret put NEXT_PUBLIC_SUPABASE_ANON_KEY --name king-and-angel
+grep '^SUPABASE_SERVICE_ROLE_KEY=' .env.local | cut -d= -f2- | tr -d '\n' | npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY --name king-and-angel
+```
 
-点击 **Save and Deploy**。第一次 build 约 2-4 分钟。完成后会拿到 `https://king-and-angel.pages.dev`。
+> ⚠️ **`SUPABASE_SERVICE_ROLE_KEY` 一定走 secret，绝不写到 wrangler.toml 或任何 git 跟踪文件**——它能绕过所有 RLS，泄露 = 灾难。
+
+### 2.3 部署
+
+```bash
+rm -rf .next .open-next     # 清缓存（防 Turbopack 字体模块解析抽风）
+npm run deploy
+```
+
+`npm run deploy` 实际跑的是 `opennextjs-cloudflare build && opennextjs-cloudflare deploy`。第一次约 2-3 分钟。完成后输出会显示 Worker 的默认地址，类似 `https://king-and-angel.<your-account>.workers.dev`。
 
 > ✨ **不需要**：手动加 `nodejs_compat` flag、不需要在每个文件加 `export const runtime = "edge"`、不需要修改任何代码文件。
 > 这些都已经在仓库的 `wrangler.toml` 和 `open-next.config.ts` 里声明好了。
@@ -120,11 +136,11 @@ update invites set display_name = '小明' where code = 'A1001';
 
 ## Part 3 · 验证
 
-打开 `https://king-and-angel.pages.dev`：
+打开 `https://king-and-angel.<your-account>.workers.dev`：
 
 - [ ] **首页**能打开，看到「写一封没有署名的信」
 - [ ] 点「持邀请码前来登记」→ 跳到 `/auth`
-- [ ] 用 `A1001` 之类的邀请码注册 → 应回首页提示「注册成功」
+- [ ] 用 `YC20060314` 之类的邀请码（参考你 invites 表的实际值）注册 → 应回首页提示「注册成功」
 - [ ] 用注册的邮箱密码登录 → 进 `/dashboard`
 - [ ] 写 3 条心愿 → 保存成功
 - [ ] 在留言板写一条留言 → 可见
@@ -144,69 +160,87 @@ update invites set display_name = '小明' where code = 'A1001';
 
 ## Part 4 · 切换活动规模
 
-测试完想切到 **15 人正式版**（n=15, k=10），需要改 3 处：
+仓库默认是 15 人正式版。如果要切回 4 人测试版，或者切到任意其他人数，需要改 3 处：
 
 ### 4.1 代码：`lib/config.ts`
 
 ```ts
-export const PARTICIPANT_TOTAL = 15;  // 从 4 改成 15
-export const REVEAL_THRESHOLD  = 10;  // 从 3 改成 10
+export const PARTICIPANT_TOTAL = 4;   // 改成你想要的人数
+export const REVEAL_THRESHOLD  = 3;   // 改成你想要的揭示门槛
 ```
 
-### 4.2 数据库：`sql/02_e2e_schema.sql` 的 `publish_seal` RPC
+### 4.2 数据库：写一条新 migration 改 publish_seal
 
-找到 `create or replace function public.publish_seal(...)` 块，把：
+`publish_seal` RPC 里 `expected_total constant int := 15` 是函数内的硬编码常量。要改它，**写一条新的 migration**（不要直接改已应用的 migration 文件），参考 `supabase/migrations/20260425000004_scale_to_15.sql` 的形式：
 
 ```sql
-expected_total constant int := 4;  -- 改成 15
+-- supabase/migrations/<新时间戳>_scale_to_4.sql
+create or replace function public.publish_seal(
+  envelopes jsonb,
+  pairing jsonb,
+  shares jsonb
+)
+returns void
+language plpgsql security definer
+set search_path = public
+as $$
+declare
+  expected_total constant int := 4;  -- 改成新数值
+  -- ... 其余函数体跟 ...004_scale_to_15.sql 完全一样
+$$;
 ```
 
-然后在 Supabase SQL Editor 重新执行整个 `create or replace function publish_seal(...) ... end; $$;` 块。
+然后：
 
-### 4.3 邀请码：`sql/01_schema.sql`
+```bash
+supabase db push --db-url "postgresql://postgres.<REF>:<PASSWORD>@aws-1-us-west-2.pooler.supabase.com:5432/postgres"
+```
 
-把测试用的 4 个邀请码换成 15 个真实名单（其中 2 个 `can_admin = true`）：
+### 4.3 邀请码：在 SQL Editor 重置
+
+在 Supabase Dashboard SQL Editor 跑：
 
 ```sql
+truncate table public.invites cascade;
 insert into public.invites (code, display_name, can_admin) values
-  ('K001', '张三', true),
-  ('K002', '李四', true),
-  -- ... 一共 15 行
-  ('K015', '小红', false)
-on conflict (code) do nothing;
+  ('YC20020323ADMIN', '1涂增基', true),
+  ('YC20060314',      '2常友善', false),
+  -- ... 一共 N 行
+  ;
 ```
+
+格式约定：邀请码 `YC` + 生日 `YYYYMMDD`（管理员后加 `ADMIN`），display_name 用「序号+姓名」。
 
 ### 4.4 清理测试数据（可选）
 
 ```sql
-delete from public.angel_envelopes;
-delete from public.sealed_pairing;
-delete from public.pre_seal_wishes;
-delete from public.public_messages;
-delete from public.tasks;
+begin;
+truncate table
+  public.pre_seal_wishes,
+  public.angel_envelopes,
+  public.sealed_pairing,
+  public.public_messages,
+  public.tasks,
+  public.pending_shares,
+  public.profiles
+restart identity cascade;
 update public.seal_state set status='open', sealed_at=null where id=1;
-delete from auth.users;
-delete from public.profiles;
-delete from public.invites;
+delete from auth.users where id is not null;
+commit;
 ```
 
-然后重新执行 4.3 的 15 个邀请码 insert。
-
-### 4.5 推送 + 重新部署
+### 4.5 重新部署
 
 ```bash
-git add lib/config.ts sql/02_e2e_schema.sql sql/01_schema.sql
-git commit -m "Switch to 15-person production config"
-git push
+rm -rf .next .open-next      # 防 Turbopack 字体缓存抽风
+npm run deploy
 ```
-
-Cloudflare 自动重新 build。
 
 ---
 
 ## Part 5 · 自定义域名（可选）
 
-1. Pages 项目 → **Custom domains** → **Set up a custom domain**
+1. Cloudflare Dashboard → 选中 `king-and-angel` Worker → **Settings** → **Triggers** → **Custom Domains**
 2. 输入域名（如 `angel.yourdomain.com`），Cloudflare 自动建 DNS
 3. 等 1-3 分钟证书签发完成
 
@@ -220,9 +254,13 @@ Cloudflare 自动重新 build。
 # 本地改代码
 npm run dev
 
-# 提交 → Cloudflare 自动 build & deploy
-git add -A && git commit -m "your message" && git push
+# 验证类型 + 部署
+node node_modules/typescript/bin/tsc --noEmit
+rm -rf .next .open-next
+npm run deploy
 ```
+
+提交到 git 是为了版本化，**不会**自动触发部署——这个项目是手动 `npm run deploy`。
 
 ### 本地预览生产构建
 
