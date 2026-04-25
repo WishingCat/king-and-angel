@@ -30,8 +30,8 @@ export async function signUpAction(formData: FormData) {
         "/auth",
         "error",
         inviteError
-          ? `邀请码查询失败：${inviteError.message}`
-          : "这里是新版本：邀请码查询失败。",
+          ? "邀请码查询失败，请稍后重试。"
+          : "这个邀请码不存在。",
       ),
     );
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   aesGcmEncryptString,
   exportRawAesKey,
@@ -8,7 +8,7 @@ import {
   importRawAesKey,
   sha256Hex,
 } from "@/lib/crypto/aead";
-import { utf8Encode } from "@/lib/crypto/encoding";
+import { utf8Encode, base64UrlToBytes } from "@/lib/crypto/encoding";
 import { deriveAesKeyFromShare } from "@/lib/crypto/hkdf";
 import { splitSecret } from "@/lib/crypto/sss";
 import { PARTICIPANT_TOTAL, REVEAL_THRESHOLD, WISHES_PER_PERSON } from "@/lib/config";
@@ -38,6 +38,39 @@ type RunState =
   | { kind: "running"; step: string }
   | { kind: "ready"; shares: ShareLine[] }
   | { kind: "error"; message: string };
+
+// Once the admin's browser has computed shares, we cache them locally so a
+// page refresh / network hiccup can't lose them. The shares never reach
+// the server — this is purely a local recovery hint.
+const SHARE_RECOVERY_KEY = "king-angel:seal-shares-pending-v1";
+
+function saveSharesLocally(shares: ShareLine[]) {
+  try {
+    sessionStorage.setItem(SHARE_RECOVERY_KEY, JSON.stringify(shares));
+  } catch {
+    // sessionStorage may be disabled; non-fatal.
+  }
+}
+
+function loadLocalShares(): ShareLine[] | null {
+  try {
+    const raw = sessionStorage.getItem(SHARE_RECOVERY_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as ShareLine[];
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearLocalShares() {
+  try {
+    sessionStorage.removeItem(SHARE_RECOVERY_KEY);
+  } catch {
+    // ignore
+  }
+}
 
 function buildDerangement(ids: string[]): string[] {
   if (ids.length < 2) {
@@ -80,13 +113,24 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
   const [state, setState] = useState<RunState>({ kind: "idle" });
   const [acknowledged, setAcknowledged] = useState(false);
 
+  // Recovery: if the seal is already published and this browser still has
+  // share material in sessionStorage, surface it so the admin can finish
+  // distributing instead of being told "already sealed, see the DBA".
+  useEffect(() => {
+    if (!alreadySealed) return;
+    const recovered = loadLocalShares();
+    if (recovered && recovered.length === PARTICIPANT_TOTAL) {
+      setState({ kind: "ready", shares: recovered });
+    }
+  }, [alreadySealed]);
+
   const wishMap = useMemo(() => groupWishes(wishes), [wishes]);
   const everyoneHasThree = useMemo(
     () => profiles.every((p) => (wishMap.get(p.id)?.filter(Boolean).length ?? 0) === 3),
     [profiles, wishMap],
   );
 
-  if (alreadySealed) {
+  if (alreadySealed && state.kind !== "ready") {
     return (
       <div className="stack" style={{ gap: 18 }}>
         <div className="row gap-md" style={{ alignItems: "center" }}>
@@ -105,7 +149,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
     );
   }
 
-  if (profiles.length !== PARTICIPANT_TOTAL) {
+  if (!alreadySealed && profiles.length !== PARTICIPANT_TOTAL) {
     return (
       <div className="alert alert-error">
         <strong>人数未齐。</strong>当前已登记 {profiles.length} 人，需要 {PARTICIPANT_TOTAL} 位全部到齐才能封缄。
@@ -113,7 +157,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
     );
   }
 
-  if (!everyoneHasThree) {
+  if (!alreadySealed && !everyoneHasThree) {
     return (
       <div className="alert alert-error">
         <strong>心愿未备。</strong>还有人未填满三条心愿——请等待全员完成后再来。
@@ -166,13 +210,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
           king_wishes: kingWishes,
         });
 
-        const shareBytes = new Uint8Array(
-          // base64url decode inline so we don't import helper here
-          (await (async () => {
-            const { base64UrlToBytes } = await import("@/lib/crypto/encoding");
-            return base64UrlToBytes(shareStrings[i]);
-          })()),
-        );
+        const shareBytes = base64UrlToBytes(shareStrings[i]);
 
         const personalKey = await deriveAesKeyFromShare(shareBytes);
         const ciphertext = await aesGcmEncryptString(personalKey, envelopePlaintext);
@@ -214,16 +252,24 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
         manifest_sha256: manifest,
       };
 
-      // 5. Submit to server (atomic via publish_seal RPC).
+      // 5. Save shares to sessionStorage BEFORE submit, so a network glitch
+      //    or refresh during the publish RPC can't strand us with a sealed
+      //    DB but no shares to hand out. The recovery branch on mount picks
+      //    these up if the seal succeeded but this page never rendered them.
+      saveSharesLocally(shareLines);
+
+      // 6. Submit to server (atomic via publish_seal RPC).
       setState({ kind: "running", step: "提交封印..." });
       const result = await publishSealAction({ envelopes, pairing });
 
       if (!result.ok) {
+        // Seal didn't go through — the local copy isn't useful; drop it.
+        clearLocalShares();
         setState({ kind: "error", message: result.error });
         return;
       }
 
-      // 6. Wipe local sensitive data — do this last so even crashes earlier
+      // 7. Wipe local sensitive data — do this last so even crashes earlier
       //    don't leave half-published state.
       void activityKeyBytes.fill(0);
 
@@ -235,6 +281,7 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
   }
 
   function wipeAndExit() {
+    clearLocalShares();
     setState({ kind: "idle" });
     setAcknowledged(false);
     // Force a reload to ensure no in-memory share material lingers.
@@ -311,6 +358,14 @@ export function SealRunner({ profiles, wishes, alreadySealed }: Props) {
               </h2>
             </div>
           </div>
+
+          {alreadySealed ? (
+            <div className="alert alert-error">
+              <strong>从本地恢复的钥匙。</strong>
+              检测到之前在这个浏览器里完成过封缄但未确认分发——下面是当时生成的钥匙。
+              请仔细核对每位参与者的名字是否对应正确，再继续分发。
+            </div>
+          ) : null}
 
           <p className="lede">
             下面每一把钥匙，请<strong>当面</strong>交给对应的参与者（纸条 · 私聊 · 当面口述）。

@@ -7,6 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run dev        # Next.js dev server with hot reload
 npm run build      # Production build (validates everything compiles)
+npm run preview    # OpenNext local preview (simulates Cloudflare Workers environment)
+npm run deploy     # Build + deploy to Cloudflare (requires wrangler auth)
 npm run lint       # next lint
 node node_modules/typescript/bin/tsc --noEmit   # Type-check only (npx tsc has perms issues here)
 ```
@@ -59,7 +61,7 @@ A user's "key" is a Shamir share string they paste into `KingReveal.tsx`. After 
 
 ### Server Actions runtime
 
-Server Actions currently use Node runtime (Next.js default). For Cloudflare Pages deployment, every Server Action and Server Component file would need `export const runtime = "edge"`. The supporting code in `lib/crypto/*` is already Web Crypto / `@noble/hashes`-based and edge-compatible.
+Server Actions run on **Cloudflare Workers Node runtime** (via `@opennextjs/cloudflare`). No per-file `export const runtime = "edge"` annotations needed. The `wrangler.toml` declares `nodejs_compat` globally. All `lib/crypto/*` code is Web Crypto / `@noble/hashes`-based and fully compatible.
 
 ## File map (only the non-obvious bits)
 
@@ -76,6 +78,8 @@ sql/02_e2e_schema.sql            # all encrypted-era tables + publish_seal RPC +
 app/admin/seal/SealRunner.tsx    # The crypto ceremony, runs entirely client-side
 app/dashboard/KingReveal.tsx     # User pastes share → HKDF → decrypt own envelope
 app/reveal/RevealClient.tsx      # ≥K participants paste shares → combine → decrypt sealed_pairing
+wrangler.toml                    # Cloudflare Workers config (nodejs_compat, assets binding)
+open-next.config.ts              # OpenNext adapter config (currently empty, uses defaults)
 ```
 
 ## Git/commit conventions
@@ -85,7 +89,11 @@ app/reveal/RevealClient.tsx      # ≥K participants paste shares → combine �
 ## Documentation surfaces
 
 - `README.md` — developer/maintainer reference (architecture, SQL migrations, debugging, scale-switch §9)
-- `DEPLOY.md` — Cloudflare Pages + Supabase deployment (Part 8 covers the test↔production switch)
+- `DEPLOY.md` — Cloudflare Workers (via OpenNext) + Supabase deployment (Part 4 covers the test↔production switch)
 - `USER_GUIDE.md` — non-technical participant walkthrough (currently written for 4-person test deployment)
 
 When changing user-visible numbers (participant count, threshold), update all three docs to match `lib/config.ts`.
+
+## Deployment
+
+Uses `@opennextjs/cloudflare` (official Cloudflare adapter for Next.js, 2025). **Not** `@cloudflare/next-on-pages` (deprecated). Deploys to Cloudflare Workers (Node runtime), not Pages Functions (edge runtime). See `DEPLOY.md` for the 2-step quickstart (Supabase SQL + Cloudflare env vars).

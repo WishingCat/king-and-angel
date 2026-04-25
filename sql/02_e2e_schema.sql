@@ -251,9 +251,9 @@ grant execute on function public.complete_task(bigint) to authenticated;
 --   pairing:   jsonb       { ct text, iv text, manifest_sha256 text }
 -- Behavior:
 --   * Asserts seal_state.status = 'open' (race-safe via RETURNING)
---   * Asserts 15 distinct profiles exist
+--   * Asserts the expected number of profiles exist (set via expected_total below)
 --   * Asserts each profile has 3 pre_seal_wishes rows
---   * Asserts envelopes covers exactly the 15 profile ids
+--   * Asserts envelopes covers exactly that many distinct profile ids
 --   * Inserts envelopes + sealed_pairing + flips seal_state to 'published'
 --   * Deletes pre_seal_wishes (so plaintext wishes stop existing in DB)
 -- All in one transaction. Designed to be invoked with the service-role key
