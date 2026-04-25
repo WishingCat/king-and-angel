@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SubmitButton } from "@/components/SubmitButton";
 import { sendMessageAction } from "@/app/dashboard/actions";
 import type { PublicMessage } from "@/lib/types";
@@ -20,6 +20,12 @@ function formatStamp(iso: string): string {
 
 export function MessageBoard({ messages }: Props) {
   const [draft, setDraft] = useState("");
+
+  // Clear draft when a new message appears (indicating successful submit).
+  // This handles the case where Server Action redirect doesn't unmount the component.
+  useEffect(() => {
+    setDraft("");
+  }, [messages.length]);
 
   return (
     <div className="stack" style={{ gap: 22 }}>

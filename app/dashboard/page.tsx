@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FormMessage } from "@/components/FormMessage";
-import { SubmitButton } from "@/components/SubmitButton";
+import { SignOutButton } from "@/components/SignOutButton";
 import { KingReveal } from "@/app/dashboard/KingReveal";
 import { MessageBoard } from "@/app/dashboard/MessageBoard";
 import { TaskBoard } from "@/app/dashboard/TaskBoard";
@@ -11,7 +11,6 @@ import {
   PARTICIPANT_TOTAL,
 } from "@/lib/dashboard";
 import { getProfileOrThrow, requireUser } from "@/lib/auth";
-import { signOutFromDashboardAction } from "@/app/dashboard/actions";
 
 type PageProps = {
   searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
@@ -40,13 +39,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
             <strong>{profile.display_name}</strong>
             {profile.can_admin ? <span className="meta-cap">· 管理员</span> : null}
           </div>
-          <form action={signOutFromDashboardAction}>
-            <SubmitButton
-              text="离席"
-              pendingText="离席中……"
-              className="button-secondary"
-            />
-          </form>
+          <SignOutButton />
         </div>
 
         <section className="stack rise" style={{ gap: 22, marginBottom: 48 }}>

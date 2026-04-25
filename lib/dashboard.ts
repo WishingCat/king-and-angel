@@ -90,11 +90,19 @@ export async function getParticipantDashboard(userId: string) {
     claimer_display_name: task.claimed_by ? claimerMap.get(task.claimed_by) ?? null : null,
   }));
 
+  // After seal, pre_seal_wishes is intentionally deleted. The progress bar
+  // would otherwise read "0/12" which looks like an error. Treat sealed as
+  // "all wishes archived" so the badge shows the steady-state max.
+  const reportedWishCount =
+    sealState.status === "published"
+      ? PARTICIPANT_TOTAL * 3
+      : (wishFilledCount ?? 0);
+
   return {
     sealState,
     stats: {
       participantCount: participantCount ?? 0,
-      wishFilledCount: wishFilledCount ?? 0,
+      wishFilledCount: reportedWishCount,
       participantTotal: PARTICIPANT_TOTAL,
     },
     ownWishes: (ownWishRows ?? []) as PreSealWish[],
@@ -127,7 +135,10 @@ export async function getAdminSummary() {
   return {
     sealState,
     participantCount: participantCount ?? 0,
-    wishRowCount: distinctWishUserCount ?? 0,
+    wishRowCount:
+      sealState.status === "published"
+        ? PARTICIPANT_TOTAL * 3
+        : (distinctWishUserCount ?? 0),
     envelopeCount: envelopeCount ?? 0,
     messageCount: messageCount ?? 0,
     taskCount: taskCount ?? 0,

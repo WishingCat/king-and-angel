@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SubmitButton } from "@/components/SubmitButton";
 import {
   claimTaskAction,
@@ -34,6 +34,12 @@ export function TaskBoard({ tasks, currentUserId }: Props) {
   const [tab, setTab] = useState<Tab>("available");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+
+  // Clear form when a new task appears (indicating successful upload).
+  useEffect(() => {
+    setTitle("");
+    setDescription("");
+  }, [tasks.length]);
 
   const buckets = useMemo(() => {
     const available: TaskWithClaimer[] = [];

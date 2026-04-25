@@ -42,39 +42,58 @@ export async function signUpAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({
+  const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
     email,
     password,
   });
 
-  if (error || !data.user) {
+  if (signUpError || !signUpData.user) {
     redirect(
       toUrlMessage(
         "/auth",
         "error",
-        error?.message ?? "注册失败，请检查邮箱是否已被使用。",
+        signUpError?.message ?? "注册失败，请检查邮箱是否已被使用。",
       ),
     );
   }
 
+  const userId = signUpData.user.id;
+
+  // Two-step partial-state recovery: if either profiles insert or invite
+  // update fails, roll back the auth.users row so the user can retry
+  // (or someone else can claim the invite code) without DBA intervention.
   const { error: profileError } = await admin.from("profiles").insert({
-    id: data.user.id,
+    id: userId,
     display_name: invite.display_name,
     can_admin: invite.can_admin,
   });
 
   if (profileError) {
-    redirect(toUrlMessage("/auth", "error", "注册成功，但创建个人资料失败，请联系管理员。"));
+    await admin.auth.admin.deleteUser(userId).catch(() => {});
+    redirect(toUrlMessage("/auth", "error", "注册失败，请稍后重试或联系管理员。"));
   }
 
-  await admin
+  const { error: inviteUpdateError } = await admin
     .from("invites")
     .update({
-      claimed_by: data.user.id,
+      claimed_by: userId,
       claimed_at: new Date().toISOString(),
       email,
     })
     .eq("code", inviteCode);
+
+  if (inviteUpdateError) {
+    // profiles row already exists, but invites isn't marked claimed —
+    // a different user could later use the same code. Roll back both
+    // to keep state consistent.
+    try {
+      await admin.from("profiles").delete().eq("id", userId);
+    } catch {
+      // best-effort
+    }
+    await admin.auth.admin.deleteUser(userId).catch(() => {});
+    redirect(toUrlMessage("/auth", "error", "注册失败，请稍后重试或联系管理员。"));
+  }
 
   redirect(toUrlMessage("/auth", "success", "注册成功，现在可以直接登录。"));
 }
