@@ -339,7 +339,9 @@ begin
   values (1, pairing->>'ct', pairing->>'iv', pairing->>'manifest_sha256');
 
   -- 8. Burn the plaintext wishes
-  delete from public.pre_seal_wishes;
+  -- Use TRUNCATE because Supabase enables pg_safeupdate which rejects
+  -- bare DELETE without WHERE, even inside SECURITY DEFINER functions.
+  truncate table public.pre_seal_wishes;
 end;
 $$;
 
