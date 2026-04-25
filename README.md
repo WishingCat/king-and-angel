@@ -147,15 +147,15 @@ SUPABASE_SERVICE_ROLE_KEY=...
 
 ## 6. 部署
 
-推荐部署方案：**Cloudflare Pages（前端）+ Supabase（数据库/鉴权）**。完整步骤请参考 [`DEPLOY.md`](./DEPLOY.md)。
+推荐部署方案：**Cloudflare Workers（前端，via OpenNext）+ Supabase（数据库 / 鉴权）**。完整步骤参考 [`DEPLOY.md`](./DEPLOY.md)。
 
-最简部署：
+最简部署（约 10 分钟）：
 
-1. 把项目 push 到 GitHub
-2. 在 Cloudflare Pages 新建项目 → Connect to Git → 选此仓库
-3. 在 Project Settings 里填入 3 个 Supabase 环境变量
-4. 按 `DEPLOY.md` 的说明加 `nodejs_compat` compatibility flag 和各文件的 edge runtime 声明
-5. Deploy
+1. 在 Supabase 新建项目，跑两份 `sql/*.sql`，抄 3 个 key
+2. 在 Cloudflare Pages 新建项目 → Connect to Git → 填 4 个环境变量
+3. Save and Deploy
+
+无需修改任何代码文件，无需在控制台手动加 compatibility flag——`wrangler.toml` 和 `open-next.config.ts` 已写好。
 
 ---
 
