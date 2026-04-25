@@ -2,8 +2,7 @@ import Link from "next/link";
 import { FormMessage } from "@/components/FormMessage";
 import { SignOutButton } from "@/components/SignOutButton";
 import { KingReveal } from "@/app/dashboard/KingReveal";
-import { MessageBoard } from "@/app/dashboard/MessageBoard";
-import { TaskBoard } from "@/app/dashboard/TaskBoard";
+import { BoardTabs } from "@/app/dashboard/BoardTabs";
 import { WishEditor } from "@/app/dashboard/WishEditor";
 import {
   getAdminSummary,
@@ -137,30 +136,12 @@ export default async function DashboardPage({ searchParams }: PageProps) {
           <span className="rule-dot" />
         </div>
 
-        <section className="grid grid-2 rise" style={{ marginTop: 32, marginBottom: 32 }}>
-          <div className="sheet sheet-xl">
-            <span className="chapter-no">
-              <span className="chapter-label">其三</span>
-              <span>留言墙</span>
-            </span>
-            <h2 className="section-title">不署名的一面墙</h2>
-            <p className="section-subtitle mb-3">
-              所有人都能看，所有人都能写。这面墙不记录是谁贴上去的。
-            </p>
-            <MessageBoard messages={participant.messages} />
-          </div>
-
-          <div className="sheet sheet-xl">
-            <span className="chapter-no">
-              <span className="chapter-label">其四</span>
-              <span>任务板</span>
-            </span>
-            <h2 className="section-title">公共任务板</h2>
-            <p className="section-subtitle mb-3">
-              匿名贴上任务条；任何人都可以接取。完成由接取者本人勾选。
-            </p>
-            <TaskBoard tasks={participant.tasks} currentUserId={user.id} />
-          </div>
+        <section className="rise" style={{ marginTop: 32, marginBottom: 32 }}>
+          <BoardTabs
+            messages={participant.messages}
+            tasks={participant.tasks}
+            currentUserId={user.id}
+          />
         </section>
 
         {adminSummary ? (
