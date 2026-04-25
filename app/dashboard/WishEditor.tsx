@@ -11,11 +11,6 @@ type Props = {
 };
 
 const ORDINALS = ["其一", "其二", "其三"] as const;
-const HINTS = [
-  "你最想被默默提醒的一件小事",
-  "你一直想做、但犹豫着没起头的小习惯",
-  "你希望有人面对面跟你说的一句话",
-] as const;
 const PLACEHOLDERS = [
   "希望有人在我忙到忘了吃饭的时候，提醒我去食堂看一下……",
   "希望能够每周读完一本书，哪怕只是散文、诗集都好。",
@@ -37,7 +32,6 @@ export function WishEditor({ initialWishes, sealStatus }: Props) {
         <div className="wish-field" key={index}>
           <div className="wish-field-label">
             <span className="wish-field-ordinal">{ORDINALS[index]}</span>
-            <span className="wish-field-hint">{HINTS[index]}</span>
           </div>
           <textarea
             className="textarea"
