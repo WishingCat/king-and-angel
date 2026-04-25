@@ -4,6 +4,9 @@
 > 适用：Next.js 16 (App Router) + React 19 + Supabase
 > 架构：前端 / SSR 跑在 Cloudflare Pages（免费 + 全球 CDN），数据库与认证用 Supabase（免费版足够）
 
+> ⚙️ **当前仓库默认是 4 人测试版**（4 人 + 12 心愿 + 3 人揭示）。
+> 部署完成后想切到 15 人正式版，请按 [§Part 8 切换活动规模](#part-8--切换活动规模) 操作。
+
 ---
 
 ## 总览：你将得到什么
@@ -69,11 +72,28 @@ git --version
 3. **Confirm email** 关闭（OFF）
 4. **Save**
 
-> 这样 15 个同学注册后立刻能登录，不必等收邮件。正式活动前可以再打开。
+> 这样**测试版的 4 个同学**注册后立刻能登录，不必等收邮件。正式活动前可以再打开。
 
-### 1.4 录入 15 位真实参与者的邀请码
+### 1.4 录入参与者邀请码
 
-打开 `sql/01_schema.sql` 末尾的示例 `insert into invites...`，把示例 4 个换成你们活动的真名 15 个。例如：
+**测试版**：`sql/01_schema.sql` 末尾已经预置 4 个测试邀请码：
+
+| 邀请码 | 姓名 | 是管理员 |
+|---|---|---|
+| `ADMIN` | 文建负责人 | ✅ |
+| `A1001` | 张三 | |
+| `A1002` | 李四 | |
+| `A1003` | 王五 | |
+
+如果你只是要做 4 人测试，**不需要改任何邀请码**——把 `01_schema.sql` 整段执行就好。要改成 4 个朋友的真名也很简单：
+
+```sql
+update invites set display_name = '小明' where code = 'A1001';
+update invites set display_name = '小红' where code = 'A1002';
+-- ...
+```
+
+**正式版**：把示例 4 个换成你们活动的 15 个真实名单，其中 2 个 `can_admin = true`：
 
 ```sql
 insert into public.invites (code, display_name, can_admin) values
@@ -318,14 +338,15 @@ delete from public.sealed_pairing;
 -- 注意：心愿已被销毁，所有人需要重新填一次
 ```
 
-然后让 15 人重新填心愿，管理员重新去 `/admin/seal` 封缄。
+然后让 4 / 15 人重新填心愿，管理员重新去 `/admin/seal` 封缄。
 
 ---
 
 ## Part 7 · 安全自查清单（活动正式开始前）
 
 - [ ] Supabase 控制台 → Auth → Confirm email **重新打开**（如果你想要邮箱确认）
-- [ ] 15 个邀请码都录入了，没有多余的测试码
+- [ ] 4（测试）/ 15（正式）个邀请码都录入了，没有多余的测试码
+- [ ] 测试期已经验证完毕，准备切到正式版的话见 [§Part 8](#part-8--切换活动规模)
 - [ ] `SUPABASE_SERVICE_ROLE_KEY` 在 Cloudflare 是 **Secret** 类型
 - [ ] GitHub 仓库里**没有** `.env.local` 文件（应该在 `.gitignore` 里）
 - [ ] 自定义域名（如果有）已经走 HTTPS
@@ -338,8 +359,8 @@ delete from public.sealed_pairing;
 **Q：能完全不用 Supabase，全部跑在 Cloudflare 上吗？**
 A：可以，但需要把 Supabase Auth 换成 Cloudflare Access、把 PostgreSQL 改成 Cloudflare D1（SQLite）、把 RLS 全部改写成应用层权限——大约 1-2 天工作量。当前项目的端到端加密设计本身和数据库无关，这部分完全不会变。如果将来要做这次迁移，可以再开一份新的部署文档。
 
-**Q：Cloudflare Pages 的免费版够 15 人用吗？**
-A：极度够用。免费版每月 100k 请求，15 个人跑一季活动撑死也用不到 1k。
+**Q：Cloudflare Pages 的免费版够用吗？**
+A：极度够用。免费版每月 100k 请求，4 人测试或 15 人正式跑一季活动撑死也用不到 1k。
 
 **Q：Supabase 免费版会被睡眠吗？**
 A：会。如果连续 7 天没有任何活动，免费版数据库会暂停。但只要任何一个用户访问一次就会自动恢复（约 30 秒）。活动期间天天有人登录就不会睡。
@@ -381,3 +402,72 @@ king_angel_yongchun_app/
 ├── wrangler.toml              # ← 部署时新增
 └── README.md
 ```
+
+---
+
+## Part 8 · 切换活动规模（4 人测试版 ↔ 15 人正式版）
+
+当前仓库默认是 **4 人测试版**（n=4, k=3）。测试完成后想切到 **15 人正式版**（n=15, k=10），需要改 3 处：
+
+### 8.1 代码：`lib/config.ts`
+
+```ts
+export const PARTICIPANT_TOTAL = 15;  // 从 4 改成 15
+export const REVEAL_THRESHOLD  = 10;  // 从 3 改成 10
+```
+
+### 8.2 数据库：`sql/02_e2e_schema.sql` 的 `publish_seal` RPC
+
+找到 `create or replace function public.publish_seal(...)` 块，把第一行常量改成：
+
+```sql
+expected_total constant int := 15;  -- 从 4 改成 15
+```
+
+然后在 Supabase SQL Editor 里**重新执行整个 `create or replace function publish_seal(...) ... end; $$;` 块**（约 60 行）。
+
+### 8.3 邀请码：`sql/01_schema.sql` 末尾
+
+把测试用的 4 个邀请码换成 15 个真实名单（见 Part 1.4）。
+
+### 8.4 清理测试数据（可选）
+
+如果数据库里已经有测试账号和测试心愿，想清空重来：
+
+```sql
+-- 清空业务数据
+delete from public.angel_envelopes;
+delete from public.sealed_pairing;
+delete from public.pre_seal_wishes;
+delete from public.public_messages;
+delete from public.tasks;
+update public.seal_state set status='open', sealed_at=null where id=1;
+
+-- 清空测试账号（谨慎！会删除所有用户）
+delete from auth.users;
+delete from public.profiles;
+
+-- 清空旧邀请码
+delete from public.invites;
+```
+
+然后重新执行 8.3 的 15 个邀请码 insert。
+
+### 8.5 推送 + 重新部署
+
+```bash
+git add lib/config.ts sql/02_e2e_schema.sql sql/01_schema.sql
+git commit -m "Switch to 15-person production config"
+git push
+```
+
+Cloudflare Pages 会自动重新 build（约 2-4 分钟）。部署完成后：
+- 首页会显示 "15 位同行者都到齐"
+- 封缄页会显示 "15 位齐聚 · 45 条心愿齐备"
+- 揭示页会要求 "≥10 把钥匙"
+
+### 8.6 参数约束
+
+- `REVEAL_THRESHOLD` 必须 ≥ 2
+- `REVEAL_THRESHOLD` 必须 ≤ `PARTICIPANT_TOTAL`
+- 推荐 `REVEAL_THRESHOLD ≈ ⌈PARTICIPANT_TOTAL × 2/3⌉`：既有意义（难以合谋提前揭示），又留容错（允许丢失几份 share）
