@@ -1,20 +1,12 @@
 import "./globals.css";
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Fraunces, JetBrains_Mono, Noto_Serif_SC } from "next/font/google";
+import { Fraunces, JetBrains_Mono, Noto_Serif_SC } from "next/font/google";
 
 const fraunces = Fraunces({
   subsets: ["latin"],
   weight: ["400", "500", "600"],
-  style: ["normal", "italic"],
+  style: ["normal"],
   variable: "--font-display",
-  display: "swap",
-});
-
-const cormorant = Cormorant_Garamond({
-  subsets: ["latin"],
-  weight: ["400", "500"],
-  style: ["italic", "normal"],
-  variable: "--font-accent",
   display: "swap",
 });
 
@@ -46,7 +38,7 @@ export default function RootLayout({
   return (
     <html
       lang="zh-CN"
-      className={`${fraunces.variable} ${cormorant.variable} ${notoSerifSC.variable} ${jetBrains.variable}`}
+      className={`${fraunces.variable} ${notoSerifSC.variable} ${jetBrains.variable}`}
     >
       <body>
         <div className="page-grain" aria-hidden="true" />

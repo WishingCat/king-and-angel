@@ -259,7 +259,7 @@ export default async function DashboardPage({ searchParams }: PageProps) {
 
         <footer className="text-center" style={{ marginTop: 64, color: "var(--ink-muted)", fontSize: 13, lineHeight: 2 }}>
           <div className="meta-cap">北京大学爱心社 · 2026</div>
-          <div style={{ marginTop: 4, fontFamily: "var(--f-accent)", fontStyle: "italic" }}>
+          <div style={{ marginTop: 4 }}>
             with warmth and silence · 福建 永春路
           </div>
         </footer>
